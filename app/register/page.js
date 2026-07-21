@@ -12,6 +12,7 @@ export default function Register() {
   const [pasteText, setPasteText] = useState('')
   const [preview, setPreview] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [editingId, setEditingId] = useState(null)
 
   useEffect(() => {
     (async () => {
@@ -38,17 +39,42 @@ export default function Register() {
 
   async function saveCharacter() {
     const data = preview || parseSheetText(pasteText)
-    if (!data.firstName) { alert('「名：」の行が見つかりません') ; return }
-    const { error } = await supabase.from('characters').insert({
-      owner_id: userId,
-      name: data.name,
-      raw_text: pasteText,
-      parsed: data,
-    })
-    if (error) { alert('保存に失敗しました: ' + error.message); return }
+    if (!data.firstName) { alert('「ファーストネーム：」の行が見つかりません') ; return }
+    if (editingId) {
+      const { error } = await supabase.from('characters').update({
+        name: data.name,
+        raw_text: pasteText,
+        parsed: data,
+      }).eq('id', editingId)
+      if (error) { alert('更新に失敗しました: ' + error.message); return }
+    } else {
+      const { error } = await supabase.from('characters').insert({
+        owner_id: userId,
+        name: data.name,
+        raw_text: pasteText,
+        parsed: data,
+      })
+      if (error) { alert('保存に失敗しました: ' + error.message); return }
+    }
     setShowForm(false)
+    setEditingId(null)
     setPasteText('')
     setPreview(null)
+    loadCharacters(userId)
+  }
+
+  function openEditForm(c) {
+    setDetail(null)
+    setEditingId(c.id)
+    handlePaste(c.raw_text || '')
+    setShowForm(true)
+  }
+
+  async function deleteCharacter(c) {
+    if (!window.confirm(`「${c.name}」を削除しますか？この操作は取り消せません。`)) return
+    const { error } = await supabase.from('characters').delete().eq('id', c.id)
+    if (error) { alert('削除に失敗しました: ' + error.message); return }
+    setDetail(null)
     loadCharacters(userId)
   }
 
@@ -65,7 +91,7 @@ export default function Register() {
           <a className="plain" href="https://w-chronicle.raindrop.jp/coc-ww-charsheet.html" target="_blank" rel="noopener noreferrer">
             探索者を作成 ↗
           </a>
-          <button className="plain primary" onClick={() => { setPasteText(''); setPreview(null); setShowForm(true) }}>
+          <button className="plain primary" onClick={() => { setEditingId(null); setPasteText(''); setPreview(null); setShowForm(true) }}>
             ＋ 新しい探索者を登録
           </button>
         </div>
@@ -85,11 +111,11 @@ export default function Register() {
       </div>
 
       {showForm && (
-        <div className="overlay show" onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}>
+        <div className="overlay show" onClick={(e) => { if (e.target === e.currentTarget) { setShowForm(false); setEditingId(null) } }}>
           <div className="sheet">
             <div className="sheet-head">
-              <h2>新しい探索者を登録</h2>
-              <button className="close-btn" onClick={() => setShowForm(false)}>&times;</button>
+              <h2>{editingId ? '探索者シートを編集' : '新しい探索者を登録'}</h2>
+              <button className="close-btn" onClick={() => { setShowForm(false); setEditingId(null) }}>&times;</button>
             </div>
             <div className="sheet-body">
               <div className="paste-hint">
@@ -101,7 +127,7 @@ export default function Register() {
                 className="paste-area"
                 value={pasteText}
                 onChange={(e) => handlePaste(e.target.value)}
-                placeholder={"姓：\n名：\n性別：\n年齢：\n寮：\n出身地：\n【能力値】\nSTR　CON　DEX　INT\n40　40　40　40\n…"}
+                placeholder={"ファーストネーム：\nファミリーネーム：\n性別：\n年齢：\n寮：\n出身地：\n【能力値】\nSTR　CON　DEX　INT\n40　40　40　40\n…"}
               />
               <div className="preview-box">
                 {preview?.name ? (
@@ -117,8 +143,8 @@ export default function Register() {
               </div>
             </div>
             <div className="sheet-actions">
-              <button className="plain" onClick={() => setShowForm(false)}>キャンセル</button>
-              <button className="plain primary" onClick={saveCharacter}>登録する</button>
+              <button className="plain" onClick={() => { setShowForm(false); setEditingId(null) }}>キャンセル</button>
+              <button className="plain primary" onClick={saveCharacter}>{editingId ? '更新する' : '登録する'}</button>
             </div>
           </div>
         </div>
@@ -136,6 +162,8 @@ export default function Register() {
               <pre className="raw-text">{detail.raw_text}</pre>
             </div>
             <div className="sheet-actions">
+              <button className="plain" style={{ borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteCharacter(detail)}>削除</button>
+              <button className="plain" onClick={() => openEditForm(detail)}>編集</button>
               <button className="plain primary" onClick={() => setDetail(null)}>閉じる</button>
             </div>
           </div>
