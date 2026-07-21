@@ -227,13 +227,6 @@ function ChatInner() {
     return '失敗'
   }
 
-  function insertSkill() {
-    if (!skillChoice) return
-    const [name, value] = skillChoice.split('|')
-    const tag = `［${name}${value}を使用］`
-    setText(t => (t ? t + ' ' + tag : tag))
-  }
-
   function rollSkillCheck() {
     if (!skillChoice) { alert('技能を選んでください'); return }
     const [name, value] = skillChoice.split('|')
@@ -384,7 +377,6 @@ function ChatInner() {
                 </optgroup>
               )}
             </select>
-            <button className="plain" onClick={insertSkill}>技能名だけ挿入</button>
             <button className="plain primary" onClick={rollSkillCheck} disabled={!!myRollThisTurn}>🎲 この技能で判定</button>
           </div>
         ) : null}
