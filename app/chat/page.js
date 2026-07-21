@@ -19,8 +19,6 @@ function ChatInner() {
   const [editingId, setEditingId] = useState(null)
   const [editText, setEditText] = useState('')
   const [turnRolls, setTurnRolls] = useState([])
-  const [freeSkillName, setFreeSkillName] = useState('')
-  const [freeSkillValue, setFreeSkillValue] = useState('')
   const [participants, setParticipants] = useState([])
   const [ready, setReady] = useState(false)
   const [flashEvent, setFlashEvent] = useState(null)
@@ -233,20 +231,21 @@ function ChatInner() {
     performRoll(name, value)
   }
 
-  function rollFreeCheck() {
-    performRoll(freeSkillName.trim() || null, freeSkillValue.trim())
-  }
-
   function rollPlainDice() {
     performRoll(null, null)
   }
 
   async function nextTurn() {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('sessions')
       .update({ turn_number: (session?.turn_number || 1) + 1 })
       .eq('id', sessionId)
+      .select()
     if (error) { alert('更新に失敗しました: ' + error.message); return }
+    if (!data || data.length === 0) {
+      alert('ターンを更新できませんでした（ホスト権限が正しく認識されていない可能性があります）。ページを再読み込みしてから、もう一度お試しください。')
+      return
+    }
     setTurnRolls([])
   }
 
@@ -380,28 +379,6 @@ function ChatInner() {
             <button className="plain primary" onClick={rollSkillCheck} disabled={!!myRollThisTurn}>🎲 この技能で判定</button>
           </div>
         ) : null}
-
-        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            style={{ flex: 1, minWidth: 120 }}
-            placeholder="技能名（例：呪文学）"
-            value={freeSkillName}
-            onChange={e => setFreeSkillName(e.target.value)}
-          />
-          <input
-            type="text"
-            style={{ width: 100 }}
-            placeholder="目標値（任意）"
-            value={freeSkillValue}
-            onChange={e => setFreeSkillValue(e.target.value)}
-            inputMode="numeric"
-          />
-          <button className="plain primary" onClick={rollFreeCheck} disabled={!!myRollThisTurn}>🎲 判定する</button>
-        </div>
-        <p className="dim" style={{ margin: '4px 0 0' }}>
-          目標値が分からない技能は、技能名だけ入れて目標値を空欄のまま振れます。その場合は成功/失敗を判定せず、出目だけが記録されます。
-        </p>
 
         <div className="actions" style={{ justifyContent: 'flex-start' }}>
           <button className="plain" onClick={rollPlainDice} disabled={!!myRollThisTurn}>🎲 1D100を振る（SAN値チェックなど）</button>
