@@ -28,6 +28,11 @@ export default function Home() {
           <span className="arrow">→</span>
         </Link>
       </div>
+      <p style={{ textAlign: 'center', marginTop: 18 }}>
+        <Link href="/login" className="back-link" style={{ display: 'inline-flex', justifyContent: 'center', margin: 0 }}>
+          別の端末で続ける（IDでログイン）
+        </Link>
+      </p>
     </div>
   )
 }

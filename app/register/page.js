@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
-import { ensureAnonUser } from '../../lib/auth'
+import { ensureAnonUser, createLoginCredentials, getCurrentLoginId } from '../../lib/auth'
 import { parseSheetText, SAMPLE_TEXT } from '../../lib/parseSheet'
 
 export default function Register() {
@@ -13,14 +13,32 @@ export default function Register() {
   const [preview, setPreview] = useState(null)
   const [detail, setDetail] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const [loginId, setLoginId] = useState(null)
+  const [newCredentials, setNewCredentials] = useState(null)
+  const [creatingCreds, setCreatingCreds] = useState(false)
 
   useEffect(() => {
     (async () => {
       const user = await ensureAnonUser()
       setUserId(user.id)
       loadCharacters(user.id)
+      const id = await getCurrentLoginId()
+      setLoginId(id)
     })()
   }, [])
+
+  async function handleCreateCredentials() {
+    setCreatingCreds(true)
+    try {
+      const creds = await createLoginCredentials()
+      setNewCredentials(creds)
+      setLoginId(creds.id)
+    } catch (err) {
+      alert('発行に失敗しました: ' + err.message)
+    } finally {
+      setCreatingCreds(false)
+    }
+  }
 
   async function loadCharacters(uid) {
     const { data, error } = await supabase
@@ -84,6 +102,37 @@ export default function Register() {
       <div className="eyebrow">WWCoC / 事前登録</div>
       <h1 className="small">探索者シート登録</h1>
       <p className="sub">キャラメーカーのテンプレートをそのまま貼り付けて登録する。</p>
+
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div className="mono small-text" style={{ marginBottom: 8 }}>他の端末でも使う</div>
+        {newCredentials ? (
+          <>
+            <div className="id-display">
+              <div className="label">ID</div>
+              <div className="row">{newCredentials.id}</div>
+              <div className="label">パスワード</div>
+              <div className="row">{newCredentials.password}</div>
+            </div>
+            <p className="dim">
+              このパスワードは今しか表示されません。必ずメモしてください。別の端末では「IDでログイン」からこの2つを入力してください。
+            </p>
+          </>
+        ) : loginId ? (
+          <p className="dim">
+            発行済みのID：<strong className="mono" style={{ color: 'var(--ink)' }}>{loginId}</strong>　
+            <Link href="/login" className="plain" style={{ display: 'inline-flex', marginLeft: 8 }}>別の端末でログイン</Link>
+          </p>
+        ) : (
+          <>
+            <p className="dim" style={{ marginBottom: 10 }}>
+              今はこの端末だけにデータが保存されています。ID・パスワードを発行すると、別の端末からも同じ探索者データにアクセスできます（メールアドレスは不要です）。
+            </p>
+            <button className="plain primary" onClick={handleCreateCredentials} disabled={creatingCreds}>
+              {creatingCreds ? '発行中…' : 'ログイン用ID・パスワードを発行する'}
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="row-between">
         <div className="mono small-text">{characters.length} 人 登録済み</div>
