@@ -117,7 +117,8 @@ function ChatInner() {
         const state = channel.presenceState()
         setParticipants(Object.values(state).map(arr => arr[0]).filter(Boolean))
       })
-      .subscribe(async (status) => {
+      .subscribe(async (status, err) => {
+        console.log('[realtime] channel status:', status, err || '')
         if (status === 'SUBSCRIBED') {
           await channel.track({ character_name: displayName(character), role: role || 'player' })
         }
@@ -142,7 +143,7 @@ function ChatInner() {
         loadEntries()
         loadRolls(s?.turn_number || 1)
       })
-    }, 4000)
+    }, 2500)
     return () => clearInterval(interval)
   }, [sessionId, ready])
 
@@ -229,8 +230,6 @@ function ChatInner() {
       ? (hasValue ? `［${skillName}${skillValue}で判定：${roll} → ${result}］` : `［${skillName}：出目 ${roll}（判定基準未入力）］`)
       : `［1D100：${roll}］`
     setText(t => (t ? t + ' ' + tag : tag))
-    setFreeSkillName('')
-    setFreeSkillValue('')
   }
 
   function judgeResult(roll, skillValue) {
