@@ -107,6 +107,9 @@ function ChatInner() {
           }
         })
       .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'dice_rolls', filter: `session_id=eq.${sessionId}` },
+        (payload) => setTurnRolls(prev => prev.map(r => r.id === payload.new.id ? payload.new : r)))
+      .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `id=eq.${sessionId}` },
         () => { loadSession().then(s => { loadEntries(); loadRolls(s?.turn_number || 1) }) })
       .on('presence', { event: 'sync' }, () => {
@@ -162,13 +165,22 @@ function ChatInner() {
   }
 
   async function deleteEntry(entryId) {
-    if (!window.confirm('この行動を取り消しますか？')) return
+    if (!window.confirm('この行動を取り消しますか？（このターンの判定があれば、それも取り消されて振り直せるようになります）')) return
     const { error } = await supabase.from('turn_actions').delete().eq('id', entryId)
     if (error) { alert('削除に失敗しました: ' + error.message); return }
     loadEntries()
+
+    const turn = session?.turn_number || 1
+    const activeRoll = turnRolls.find(r => r.user_id === userId && r.turn_number === turn && !r.voided)
+    if (activeRoll) {
+      const { error: voidError } = await supabase.from('dice_rolls').update({ voided: true }).eq('id', activeRoll.id)
+      if (!voidError) {
+        setTurnRolls(prev => prev.map(r => r.id === activeRoll.id ? { ...r, voided: true } : r))
+      }
+    }
   }
 
-  const myRollThisTurn = turnRolls.find(r => r.user_id === userId)
+  const myRollThisTurn = turnRolls.find(r => r.user_id === userId && !r.voided)
 
   async function performRoll(skillName, skillValue) {
     if (myRollThisTurn) {
@@ -464,12 +476,12 @@ function ChatInner() {
         <div className="log-title">Turn {session?.turn_number || 1} — 判定ログ（記録後は誰も書き換え不可）</div>
         {turnRolls.length === 0 && <div className="empty-state">まだ誰も判定していません。</div>}
         {turnRolls.map(r => (
-          <div key={r.id} className="entry">
+          <div key={r.id} className="entry" style={{ opacity: r.voided ? 0.5 : 1 }}>
             <span className="who">{r.character_name}</span>
             <span className="what">
               {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : '1D100'} → 出目 {r.roll}
             </span>
-            <span className="check">{r.result || '出目のみ'}</span>
+            <span className="check">{r.result || '出目のみ'}{r.voided ? '（取り消し）' : ''}</span>
           </div>
         ))}
       </div>
