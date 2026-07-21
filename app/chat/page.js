@@ -22,20 +22,20 @@ function ChatInner() {
   const [participants, setParticipants] = useState([])
   const [participantAvatars, setParticipantAvatars] = useState({})
   const [ready, setReady] = useState(false)
-  const [flashEvent, setFlashEvent] = useState(null)
-  const isTypingRef = useRef(false)
   const channelRef = useRef(null)
 
   function displayName(c) {
     return c?.parsed?.firstName || c?.name || '無名の探索者'
   }
 
-  function triggerFlash(roll) {
-    const mode = isTypingRef.current ? 'banner' : 'full'
-    setFlashEvent({ ...roll, mode })
-    setTimeout(() => {
-      setFlashEvent(current => (current && current.id === roll.id ? null : current))
-    }, mode === 'banner' ? 4200 : 3200)
+  function resultLabel(result) {
+    if (result === 'クリティカル') {
+      return <span style={{ color: 'var(--gold)', fontWeight: 700, textShadow: '0 0 6px rgba(184,147,63,0.5)' }}>✨クリティカル✨</span>
+    }
+    if (result === 'ファンブル') {
+      return <span style={{ color: 'var(--wax)', fontWeight: 700, textShadow: '0 0 4px rgba(110,31,42,0.35)' }}>💀ファンブル💀</span>
+    }
+    return result || '出目のみ'
   }
 
   useEffect(() => {
@@ -104,9 +104,6 @@ function ChatInner() {
         { event: 'INSERT', schema: 'public', table: 'dice_rolls', filter: `session_id=eq.${sessionId}` },
         (payload) => {
           setTurnRolls(prev => prev.some(r => r.id === payload.new.id) ? prev : [...prev, payload.new])
-          if (payload.new.result === 'クリティカル' || payload.new.result === 'ファンブル') {
-            triggerFlash(payload.new)
-          }
         })
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'dice_rolls', filter: `session_id=eq.${sessionId}` },
@@ -385,8 +382,6 @@ function ChatInner() {
           className="transcript-input"
           value={text}
           onChange={e => setText(e.target.value)}
-          onFocus={() => { isTypingRef.current = true }}
-          onBlur={() => { isTypingRef.current = false }}
           placeholder="ここに行動宣言を入力してください…"
         />
 
@@ -419,7 +414,7 @@ function ChatInner() {
           {myRollThisTurn && (
             <span className="mono small-text" style={{ alignSelf: 'center' }}>
               あなたの今ターンの判定：{myRollThisTurn.skill_name ? `${myRollThisTurn.skill_name}${myRollThisTurn.skill_value || ''} → ` : ''}
-              {myRollThisTurn.roll}{myRollThisTurn.result ? `（${myRollThisTurn.result}）` : '（出目のみ）'}
+              {myRollThisTurn.roll}（{resultLabel(myRollThisTurn.result)}）
             </span>
           )}
         </div>
@@ -443,8 +438,6 @@ function ChatInner() {
                   style={{ minHeight: 60, fontSize: 15 }}
                   value={editText}
                   onChange={ev => setEditText(ev.target.value)}
-                  onFocus={() => { isTypingRef.current = true }}
-                  onBlur={() => { isTypingRef.current = false }}
                 />
                 <div className="actions" style={{ marginTop: 0 }}>
                   <button className="plain" onClick={() => setEditingId(null)}>キャンセル</button>
@@ -506,42 +499,10 @@ function ChatInner() {
             <span className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
               {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : '1D100'} → 出目 {r.roll}
             </span>
-            <span className="check">{r.result || '出目のみ'}{r.voided ? '（取り消し）' : ''}</span>
+            <span className="check">{resultLabel(r.result)}{r.voided ? '（取り消し）' : ''}</span>
           </div>
         ))}
       </div>
-
-      {flashEvent && flashEvent.mode === 'full' && (
-        <div
-          className={'roll-flash ' + (flashEvent.result === 'ファンブル' ? 'roll-flash-fumble' : 'roll-flash-critical')}
-          onClick={() => setFlashEvent(null)}
-        >
-          <div className="roll-flash-inner">
-            <div className="roll-flash-label">
-              {flashEvent.result === 'ファンブル' ? '💀 ファンブル 💀' : '✨ クリティカル ✨'}
-            </div>
-            <div className="roll-flash-detail">
-              {flashEvent.character_name}
-              {flashEvent.skill_name ? `（${flashEvent.skill_name}${flashEvent.skill_value || ''}）` : ''}
-              　出目 {flashEvent.roll}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {flashEvent && flashEvent.mode === 'banner' && (
-        <div
-          className={'roll-banner ' + (flashEvent.result === 'ファンブル' ? 'roll-banner-fumble' : 'roll-banner-critical')}
-          onClick={() => setFlashEvent(null)}
-        >
-          {flashEvent.result === 'ファンブル' ? '💀' : '✨'}
-          {' '}
-          <strong>{flashEvent.character_name}</strong>
-          {flashEvent.result === 'ファンブル' ? ' がファンブル！' : ' がクリティカル！'}
-          {flashEvent.skill_name ? `（${flashEvent.skill_name}${flashEvent.skill_value || ''}）` : ''}
-          　出目 {flashEvent.roll}
-        </div>
-      )}
     </div>
   )
 }
