@@ -120,7 +120,7 @@ function ChatInner() {
       .subscribe(async (status, err) => {
         console.log('[realtime] channel status:', status, err || '')
         if (status === 'SUBSCRIBED') {
-          await channel.track({ character_name: displayName(character), role: role || 'player' })
+          await channel.track({ character_name: displayName(character), role: role || 'player', avatar: character?.avatar || null })
         }
       })
     channelRef.current = channel
@@ -130,22 +130,8 @@ function ChatInner() {
   // keep presence info up to date once character/role finish loading (or change)
   useEffect(() => {
     if (!channelRef.current) return
-    channelRef.current.track({ character_name: displayName(character), role: role || 'player' })
+    channelRef.current.track({ character_name: displayName(character), role: role || 'player', avatar: character?.avatar || null })
   }, [character, role])
-
-  // Realtime delivery has proven unreliable across accounts/browsers in testing.
-  // Poll every few seconds as a guaranteed fallback so both sides stay in sync
-  // even if the websocket push never arrives.
-  useEffect(() => {
-    if (!sessionId || !ready) return
-    const interval = setInterval(() => {
-      loadSession().then(s => {
-        loadEntries()
-        loadRolls(s?.turn_number || 1)
-      })
-    }, 2500)
-    return () => clearInterval(interval)
-  }, [sessionId, ready])
 
   async function confirmAction(standby) {
     const who = displayName(character)
@@ -342,9 +328,22 @@ function ChatInner() {
                 background: p.role === 'host' ? 'var(--wax)' : 'var(--arcane)',
                 color: 'var(--parchment)',
                 fontSize: 12,
-                padding: '4px 12px',
+                padding: '4px 12px 4px 4px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
+              {p.avatar?.src && (
+                <span
+                  style={{
+                    width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                    backgroundImage: `url(${p.avatar.src})`,
+                    backgroundSize: `${(p.avatar.zoom || 1) * 100}%`,
+                    backgroundPosition: `${p.avatar.posX ?? 50}% ${p.avatar.posY ?? 50}%`,
+                  }}
+                />
+              )}
               {p.character_name}{p.role === 'host' ? '（HOST）' : ''}
             </span>
           ))}
