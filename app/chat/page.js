@@ -89,13 +89,16 @@ function ChatInner() {
       .channel('session_' + sessionId, { config: { presence: { key: userId } } })
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'turn_actions', filter: `session_id=eq.${sessionId}` },
-        () => loadEntries())
+        (payload) => {
+          setEntries(prev => prev.some(e => e.id === payload.new.id) ? prev : [...prev, payload.new])
+          loadEntries()
+        })
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'turn_actions', filter: `session_id=eq.${sessionId}` },
-        () => loadEntries())
+        (payload) => setEntries(prev => prev.map(e => e.id === payload.new.id ? payload.new : e)))
       .on('postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'turn_actions', filter: `session_id=eq.${sessionId}` },
-        () => loadEntries())
+        (payload) => setEntries(prev => prev.filter(e => e.id !== payload.old.id)))
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'dice_rolls', filter: `session_id=eq.${sessionId}` },
         (payload) => {
