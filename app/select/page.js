@@ -52,7 +52,16 @@ function SelectInner() {
             className={'pcard' + (selected?.id === c.id ? ' selected' : '')}
             onClick={() => setSelected(c)}
           >
-            <div className="portrait">{(c.name || '?').trim().charAt(0)}</div>
+            <div
+              className="portrait"
+              style={c.avatar?.src ? {
+                backgroundImage: `url(${c.avatar.src})`,
+                backgroundSize: `${(c.avatar.zoom || 1) * 100}%`,
+                backgroundPosition: `${c.avatar.posX ?? 50}% ${c.avatar.posY ?? 50}%`,
+              } : undefined}
+            >
+              {!c.avatar?.src && (c.name || '?').trim().charAt(0)}
+            </div>
             <div className="name">{c.name}</div>
             {c.parsed?.house && <span className="house-chip">{c.parsed.house}</span>}
           </div>
