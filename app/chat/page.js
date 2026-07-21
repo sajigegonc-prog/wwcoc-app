@@ -246,6 +246,8 @@ function ChatInner() {
       alert('ターンを更新できませんでした（ホスト権限が正しく認識されていない可能性があります）。ページを再読み込みしてから、もう一度お試しください。')
       return
     }
+    setSession(data[0])
+    setEntries([])
     setTurnRolls([])
   }
 
