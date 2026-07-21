@@ -16,6 +16,37 @@ export default function Register() {
   const [loginId, setLoginId] = useState(null)
   const [newCredentials, setNewCredentials] = useState(null)
   const [creatingCreds, setCreatingCreds] = useState(false)
+  const [avatarSrc, setAvatarSrc] = useState(null)
+  const [avatarZoom, setAvatarZoom] = useState(1.3)
+  const [avatarPosX, setAvatarPosX] = useState(50)
+  const [avatarPosY, setAvatarPosY] = useState(50)
+
+  function handleAvatarFile(file) {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const maxDim = 640
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width * scale
+        canvas.height = img.height * scale
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        setAvatarSrc(canvas.toDataURL('image/jpeg', 0.85))
+        setAvatarZoom(1.3)
+        setAvatarPosX(50)
+        setAvatarPosY(50)
+      }
+      img.src = e.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function avatarPayload() {
+    if (!avatarSrc) return null
+    return { src: avatarSrc, zoom: avatarZoom, posX: avatarPosX, posY: avatarPosY }
+  }
 
   useEffect(() => {
     (async () => {
@@ -63,6 +94,7 @@ export default function Register() {
         name: data.name,
         raw_text: pasteText,
         parsed: data,
+        avatar: avatarPayload(),
       }).eq('id', editingId)
       if (error) { alert('更新に失敗しました: ' + error.message); return }
     } else {
@@ -71,6 +103,7 @@ export default function Register() {
         name: data.name,
         raw_text: pasteText,
         parsed: data,
+        avatar: avatarPayload(),
       })
       if (error) { alert('保存に失敗しました: ' + error.message); return }
     }
@@ -78,6 +111,7 @@ export default function Register() {
     setEditingId(null)
     setPasteText('')
     setPreview(null)
+    setAvatarSrc(null)
     loadCharacters(userId)
   }
 
@@ -85,6 +119,17 @@ export default function Register() {
     setDetail(null)
     setEditingId(c.id)
     handlePaste(c.raw_text || '')
+    if (c.avatar) {
+      setAvatarSrc(c.avatar.src)
+      setAvatarZoom(c.avatar.zoom || 1.3)
+      setAvatarPosX(c.avatar.posX ?? 50)
+      setAvatarPosY(c.avatar.posY ?? 50)
+    } else {
+      setAvatarSrc(null)
+      setAvatarZoom(1.3)
+      setAvatarPosX(50)
+      setAvatarPosY(50)
+    }
     setShowForm(true)
   }
 
@@ -142,7 +187,7 @@ export default function Register() {
           <a className="plain" href="https://w-chronicle.raindrop.jp/coc-ww-charsheet.html" target="_blank" rel="noopener noreferrer">
             探索者を作成 ↗
           </a>
-          <button className="plain primary" onClick={() => { setEditingId(null); setPasteText(''); setPreview(null); setShowForm(true) }}>
+          <button className="plain primary" onClick={() => { setEditingId(null); setPasteText(''); setPreview(null); setAvatarSrc(null); setAvatarZoom(1.3); setAvatarPosX(50); setAvatarPosY(50); setShowForm(true) }}>
             ＋ 新しい探索者を登録
           </button>
         </div>
@@ -154,7 +199,16 @@ export default function Register() {
         )}
         {characters.map(c => (
           <div key={c.id} className="pcard" onClick={() => setDetail(c)}>
-            <div className="portrait">{(c.name || '?').trim().charAt(0)}</div>
+            <div
+              className="portrait"
+              style={c.avatar?.src ? {
+                backgroundImage: `url(${c.avatar.src})`,
+                backgroundSize: `${(c.avatar.zoom || 1) * 100}%`,
+                backgroundPosition: `${c.avatar.posX ?? 50}% ${c.avatar.posY ?? 50}%`,
+              } : undefined}
+            >
+              {!c.avatar?.src && (c.name || '?').trim().charAt(0)}
+            </div>
             <div className="name">{c.name}</div>
             {c.parsed?.house && <span className="house-chip">{c.parsed.house}</span>}
           </div>
@@ -169,6 +223,42 @@ export default function Register() {
               <button className="close-btn" onClick={() => { setShowForm(false); setEditingId(null) }}>&times;</button>
             </div>
             <div className="sheet-body">
+              <div className="ffield">
+                <label>アイコン画像（任意）</label>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <div
+                    style={{
+                      width: 120, height: 120, borderRadius: '50%',
+                      border: '2px solid var(--gold-soft)', background: 'var(--paper)',
+                      backgroundImage: avatarSrc ? `url(${avatarSrc})` : undefined,
+                      backgroundSize: avatarSrc ? `${avatarZoom * 100}%` : undefined,
+                      backgroundPosition: avatarSrc ? `${avatarPosX}% ${avatarPosY}%` : undefined,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <input type="file" accept="image/*" onChange={(e) => handleAvatarFile(e.target.files[0])} />
+                    {avatarSrc && (
+                      <>
+                        <div style={{ marginTop: 10 }}>
+                          <label>拡大</label>
+                          <input type="range" min="1" max="3" step="0.1" value={avatarZoom} onChange={(e) => setAvatarZoom(parseFloat(e.target.value))} />
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          <label>左右position</label>
+                          <input type="range" min="0" max="100" value={avatarPosX} onChange={(e) => setAvatarPosX(parseInt(e.target.value, 10))} />
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          <label>上下position</label>
+                          <input type="range" min="0" max="100" value={avatarPosY} onChange={(e) => setAvatarPosY(parseInt(e.target.value, 10))} />
+                        </div>
+                        <button type="button" className="plain" style={{ marginTop: 8, fontSize: 11 }} onClick={() => setAvatarSrc(null)}>画像を削除</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="paste-hint">
                 キャラメーカーの出力をそのままコピー＆ペーストしてください。
                 {' '}
@@ -209,7 +299,20 @@ export default function Register() {
               <button className="close-btn" onClick={() => setDetail(null)}>&times;</button>
             </div>
             <div className="sheet-body">
-              <div className="detail-name">{detail.name}</div>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16 }}>
+                {detail.avatar?.src && (
+                  <div
+                    style={{
+                      width: 88, height: 88, borderRadius: '50%',
+                      border: '2px solid var(--gold-soft)', flexShrink: 0,
+                      backgroundImage: `url(${detail.avatar.src})`,
+                      backgroundSize: `${(detail.avatar.zoom || 1) * 100}%`,
+                      backgroundPosition: `${detail.avatar.posX ?? 50}% ${detail.avatar.posY ?? 50}%`,
+                    }}
+                  />
+                )}
+                <div className="detail-name" style={{ margin: 0 }}>{detail.name}</div>
+              </div>
               <pre className="raw-text">{detail.raw_text}</pre>
             </div>
             <div className="sheet-actions">

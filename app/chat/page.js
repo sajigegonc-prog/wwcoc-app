@@ -22,6 +22,7 @@ function ChatInner() {
   const [freeSkillName, setFreeSkillName] = useState('')
   const [freeSkillValue, setFreeSkillValue] = useState('')
   const [participants, setParticipants] = useState([])
+  const [ready, setReady] = useState(false)
   const [flashEvent, setFlashEvent] = useState(null)
   const isTypingRef = useRef(false)
   const channelRef = useRef(null)
@@ -52,6 +53,7 @@ function ChatInner() {
       const s = await loadSession()
       await loadEntries()
       await loadRolls(s?.turn_number || 1)
+      setReady(true)
     })()
   }, [sessionId])
 
@@ -84,7 +86,7 @@ function ChatInner() {
   }
 
   useEffect(() => {
-    if (!sessionId || !userId) return
+    if (!sessionId || !userId || !ready) return
     const channel = supabase
       .channel('session_' + sessionId, { config: { presence: { key: userId } } })
       .on('postgres_changes',
@@ -118,7 +120,7 @@ function ChatInner() {
       })
     channelRef.current = channel
     return () => { supabase.removeChannel(channel); channelRef.current = null }
-  }, [sessionId, userId])
+  }, [sessionId, userId, ready])
 
   // keep presence info up to date once character/role finish loading (or change)
   useEffect(() => {
@@ -130,7 +132,7 @@ function ChatInner() {
     const who = displayName(character)
     const body = standby ? '（今回は待機します）' : text.trim()
     if (!standby && !body) return
-    const { error } = await supabase.from('turn_actions').insert({
+    const { data, error } = await supabase.from('turn_actions').insert({
       session_id: sessionId,
       turn_number: session?.turn_number || 1,
       character_name: who,
@@ -138,8 +140,9 @@ function ChatInner() {
       text: body,
       is_standby: standby,
       user_id: userId,
-    })
+    }).select().single()
     if (error) { alert('送信に失敗しました: ' + error.message); return }
+    setEntries(prev => prev.some(e => e.id === data.id) ? prev : [...prev, data])
     setText('')
   }
 
@@ -289,6 +292,17 @@ function ChatInner() {
 
       <div className="row-between">
         <div className="selected-strip" style={{ flex: 1 }}>
+          {character?.avatar?.src && (
+            <span
+              className="mini-portrait"
+              style={{
+                backgroundImage: `url(${character.avatar.src})`,
+                backgroundSize: `${(character.avatar.zoom || 1) * 100}%`,
+                backgroundPosition: `${character.avatar.posX ?? 50}% ${character.avatar.posY ?? 50}%`,
+                marginRight: 4,
+              }}
+            />
+          )}
           使用中の探索者：<strong>{character?.name || '未選択'}</strong>
         </div>
         <span className="turn-badge">{isHost ? 'HOST' : 'PLAYER'}</span>
@@ -403,20 +417,6 @@ function ChatInner() {
       </div>
 
       <div className="card">
-        <div className="log-title">Turn {session?.turn_number || 1} — 判定ログ（記録後は誰も書き換え不可）</div>
-        {turnRolls.length === 0 && <div className="empty-state">まだ誰も判定していません。</div>}
-        {turnRolls.map(r => (
-          <div key={r.id} className="entry">
-            <span className="who">{r.character_name}</span>
-            <span className="what">
-              {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : '1D100'} → 出目 {r.roll}
-            </span>
-            <span className="check">{r.result || '出目のみ'}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="card">
         <div className="log-title">Turn {session?.turn_number || 1} — 確定済み行動</div>
         {entries.length === 0 && <div className="empty-state">まだ確定した行動はありません。</div>}
         {entries.map(e => (
@@ -458,6 +458,20 @@ function ChatInner() {
             {isHost && <button className="plain primary" onClick={copyToAI}>AIへコピー</button>}
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="log-title">Turn {session?.turn_number || 1} — 判定ログ（記録後は誰も書き換え不可）</div>
+        {turnRolls.length === 0 && <div className="empty-state">まだ誰も判定していません。</div>}
+        {turnRolls.map(r => (
+          <div key={r.id} className="entry">
+            <span className="who">{r.character_name}</span>
+            <span className="what">
+              {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : '1D100'} → 出目 {r.roll}
+            </span>
+            <span className="check">{r.result || '出目のみ'}</span>
+          </div>
+        ))}
       </div>
 
       {flashEvent && flashEvent.mode === 'full' && (
