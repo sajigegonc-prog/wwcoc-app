@@ -20,6 +20,7 @@ function ChatInner() {
   const [editText, setEditText] = useState('')
   const [turnRolls, setTurnRolls] = useState([])
   const [participants, setParticipants] = useState([])
+  const [participantAvatars, setParticipantAvatars] = useState({})
   const [ready, setReady] = useState(false)
   const [flashEvent, setFlashEvent] = useState(null)
   const isTypingRef = useRef(false)
@@ -127,11 +128,40 @@ function ChatInner() {
     return () => { supabase.removeChannel(channel); channelRef.current = null }
   }, [sessionId, userId, ready])
 
+  // Fetch everyone's avatar via a normal REST query (NOT the realtime channel) —
+  // this keeps the presence/broadcast payload small while still letting us show icons.
+  useEffect(() => {
+    if (!sessionId || !ready) return
+    (async () => {
+      const { data } = await supabase
+        .from('session_participants')
+        .select('user_id, characters(avatar)')
+        .eq('session_id', sessionId)
+      const map = {}
+      ;(data || []).forEach(row => { if (row.characters?.avatar) map[row.user_id] = row.characters.avatar })
+      setParticipantAvatars(map)
+    })()
+  }, [sessionId, ready, participants.length])
+
   // keep presence info up to date once character/role finish loading (or change)
   useEffect(() => {
     if (!channelRef.current) return
     channelRef.current.track({ character_name: displayName(character), role: role || 'player' })
   }, [character, role])
+
+  // Realtime push has proven unreliable in practice. Poll as the primary sync
+  // mechanism so both sides reliably stay in sync (realtime, when it works,
+  // just makes it feel faster in between polls).
+  useEffect(() => {
+    if (!sessionId || !ready) return
+    const interval = setInterval(() => {
+      loadSession().then(s => {
+        loadEntries()
+        loadRolls(s?.turn_number || 1)
+      })
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [sessionId, ready])
 
   async function confirmAction(standby) {
     const who = displayName(character)
@@ -424,7 +454,20 @@ function ChatInner() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                  <span className="who">{e.character_name}</span>
+                  <span className="who" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {participantAvatars[e.user_id]?.src && (
+                      <span
+                        style={{
+                          width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                          border: '1px solid var(--gold-soft)',
+                          backgroundImage: `url(${participantAvatars[e.user_id].src})`,
+                          backgroundSize: `${(participantAvatars[e.user_id].zoom || 1) * 100}%`,
+                          backgroundPosition: `${participantAvatars[e.user_id].posX ?? 50}% ${participantAvatars[e.user_id].posY ?? 50}%`,
+                        }}
+                      />
+                    )}
+                    {e.character_name}
+                  </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="check">{e.is_standby ? '待機 ー' : '確定済み ✓'}</span>
                     {e.user_id === userId && !e.is_standby && (
