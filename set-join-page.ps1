@@ -1,4 +1,5 @@
-﻿'use client'
+@'
+'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -13,7 +14,7 @@ export default function Join() {
 
   async function joinSession() {
     if (sessionCode.trim() === 'WWCOC-' || password.trim() === 'MAGIC-' || !sessionCode.trim() || !password.trim()) {
-      alert('繧ｻ繝・す繝ｧ繝ｳID縺ｨ繝代せ繝ｯ繝ｼ繝峨ｒ蜈･蜉帙＠縺ｦ縺上□縺輔＞')
+      alert('セッションIDとパスワードを入力してください')
       return
     }
     setBusy(true)
@@ -36,7 +37,7 @@ export default function Join() {
       localStorage.setItem('wwcoc_role', 'player')
       router.push('/chat?session=' + sessionId)
     } catch (err) {
-      alert('蜿ょ刈縺ｫ螟ｱ謨励＠縺ｾ縺励◆: ' + err.message)
+      alert('参加に失敗しました: ' + err.message)
     } finally {
       setBusy(false)
     }
@@ -44,24 +45,25 @@ export default function Join() {
 
   return (
     <div className="wrap narrow">
-      <Link href="/select?flow=join" className="back-link">竊・謗｢邏｢閠・∈謚槭∈謌ｻ繧・/Link>
-      <div className="eyebrow">WWCoC / 蜿ょ刈</div>
-      <h1 className="small">繧ｻ繝・す繝ｧ繝ｳ縺ｫ蜿ょ刈</h1>
+      <Link href="/select?flow=join" className="back-link">← 探索者選択へ戻る</Link>
+      <div className="eyebrow">WWCoC / 参加</div>
+      <h1 className="small">セッションに参加</h1>
       <div className="card">
         <div className="ffield">
-          <label>繧ｻ繝・す繝ｧ繝ｳID</label>
+          <label>セッションID</label>
           <input value={sessionCode} onChange={e => setSessionCode(e.target.value)} placeholder="WWCOC-58291" />
         </div>
         <div className="ffield">
-          <label>繝代せ繝ｯ繝ｼ繝・/label>
+          <label>パスワード</label>
           <input value={password} onChange={e => setPassword(e.target.value)} placeholder="MAGIC-742" />
         </div>
         <div className="actions">
           <button className="plain primary" onClick={joinSession} disabled={busy}>
-            {busy ? '蜿ょ刈荳ｭ窶ｦ' : '蜿ょ刈縺励※繝√Ε繝・ヨ縺ｸ騾ｲ繧 竊・}
+            {busy ? '参加中…' : '参加してチャットへ進む →'}
           </button>
         </div>
       </div>
     </div>
   )
 }
+'@ | Set-Content -Path "C:\Users\madoc\wwcoc-app\app\join\page.js" -Encoding UTF8
