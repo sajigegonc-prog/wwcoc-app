@@ -132,6 +132,20 @@ function ChatInner() {
     channelRef.current.track({ character_name: displayName(character), role: role || 'player' })
   }, [character, role])
 
+  // Realtime delivery has proven unreliable across accounts/browsers in testing.
+  // Poll every few seconds as a guaranteed fallback so both sides stay in sync
+  // even if the websocket push never arrives.
+  useEffect(() => {
+    if (!sessionId || !ready) return
+    const interval = setInterval(() => {
+      loadSession().then(s => {
+        loadEntries()
+        loadRolls(s?.turn_number || 1)
+      })
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [sessionId, ready])
+
   async function confirmAction(standby) {
     const who = displayName(character)
     const body = standby ? '（今回は待機します）' : text.trim()
