@@ -104,7 +104,7 @@ export default function Register() {
       <p className="sub">キャラメーカーのテンプレートをそのまま貼り付けて登録する。</p>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="mono small-text" style={{ marginBottom: 8 }}>他の端末でも使う</div>
+        <div className="mono small-text" style={{ marginBottom: 8 }}>データを守る（推奨）</div>
         {newCredentials ? (
           <>
             <div className="id-display">
@@ -114,21 +114,23 @@ export default function Register() {
               <div className="row">{newCredentials.password}</div>
             </div>
             <p className="dim">
-              このパスワードは今しか表示されません。必ずメモしてください。別の端末では「IDでログイン」からこの2つを入力してください。
+              このパスワードは今しか表示されません。必ずメモしてください。Cookieを消してしまった時や、別の端末を使う時は、トップページの「IDでログイン」からこの2つを入力すれば復帰できます。
             </p>
           </>
         ) : loginId ? (
           <p className="dim">
             発行済みのID：<strong className="mono" style={{ color: 'var(--ink)' }}>{loginId}</strong>　
-            <Link href="/login" className="plain" style={{ display: 'inline-flex', marginLeft: 8 }}>別の端末でログイン</Link>
+            <Link href="/login" className="plain" style={{ display: 'inline-flex', marginLeft: 8 }}>IDでログイン</Link>
+            <br />
+            このIDとパスワードがあれば、Cookieが消えた時だけでなく、友達のスマホや他のPCなど、別の端末からでも同じデータにログインできます。
           </p>
         ) : (
           <>
             <p className="dim" style={{ marginBottom: 10 }}>
-              今はこの端末だけにデータが保存されています。ID・パスワードを発行すると、別の端末からも同じ探索者データにアクセスできます（メールアドレスは不要です）。
+              今のデータは、このブラウザだけに保存されています。Cookieを消す・機種変更するなど、思わぬきっかけでアクセスできなくなることがあります。ID・パスワードを発行しておくと、もしもの時も同じデータに戻ってこられます（別の端末で使いたい時にも使えます。メールアドレスは不要です）。
             </p>
             <button className="plain primary" onClick={handleCreateCredentials} disabled={creatingCreds}>
-              {creatingCreds ? '発行中…' : 'ログイン用ID・パスワードを発行する'}
+              {creatingCreds ? '発行中…' : 'ID・パスワードを発行する'}
             </button>
           </>
         )}
