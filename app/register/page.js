@@ -38,7 +38,7 @@ export default function Register() {
 
   async function saveCharacter() {
     const data = preview || parseSheetText(pasteText)
-    if (!data.name) { alert('「名前：」の行が見つかりません') ; return }
+    if (!data.firstName) { alert('「名：」の行が見つかりません') ; return }
     const { error } = await supabase.from('characters').insert({
       owner_id: userId,
       name: data.name,
@@ -101,7 +101,7 @@ export default function Register() {
                 className="paste-area"
                 value={pasteText}
                 onChange={(e) => handlePaste(e.target.value)}
-                placeholder={"名前：\n性別：\n年齢：\n寮：\n出身地：\n【能力値】\nSTR　CON　DEX　INT\n40　40　40　40\n…"}
+                placeholder={"姓：\n名：\n性別：\n年齢：\n寮：\n出身地：\n【能力値】\nSTR　CON　DEX　INT\n40　40　40　40\n…"}
               />
               <div className="preview-box">
                 {preview?.name ? (

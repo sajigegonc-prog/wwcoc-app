@@ -186,3 +186,86 @@ input[type=text], input, select, textarea{
   padding:12px 14px; background:#1B1B1D; color:#E8E1CE; font-family:'JetBrains Mono', monospace;
   font-size:12px; white-space:pre-wrap; border-radius:3px; line-height:1.6;
 }
+
+.roll-flash{
+  position:fixed; inset:0; z-index:200;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+  animation: rollFlashFade 3.2s ease forwards;
+}
+.roll-flash-critical{
+  background: radial-gradient(circle at center, rgba(184,147,63,0.35), rgba(27,27,29,0.75) 70%);
+}
+.roll-flash-fumble{
+  background: radial-gradient(circle at center, rgba(110,31,42,0.4), rgba(10,10,10,0.85) 70%);
+}
+.roll-flash-inner{
+  text-align:center;
+  animation: rollFlashPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.roll-flash-label{
+  font-family:'Cinzel', serif; font-weight:700; font-size:44px;
+  letter-spacing:0.04em;
+}
+.roll-flash-critical .roll-flash-label{
+  color: var(--gold-soft);
+  text-shadow: 0 0 24px rgba(216,190,133,0.9), 0 0 60px rgba(184,147,63,0.6);
+  animation: rollFlashGlow 1.1s ease-in-out infinite alternate;
+}
+.roll-flash-fumble .roll-flash-label{
+  color: #E8B4B4;
+  text-shadow: 0 0 24px rgba(110,31,42,0.9), 0 0 60px rgba(110,31,42,0.7);
+  animation: rollFlashShake 0.4s ease-in-out 2;
+}
+.roll-flash-detail{
+  margin-top:14px; font-family:'JetBrains Mono', monospace; font-size:15px;
+  color: var(--parchment);
+  letter-spacing:0.04em;
+}
+
+@keyframes rollFlashFade{
+  0%{ opacity:0; }
+  8%{ opacity:1; }
+  85%{ opacity:1; }
+  100%{ opacity:0; pointer-events:none; }
+}
+@keyframes rollFlashPop{
+  0%{ transform:scale(0.6); opacity:0; }
+  100%{ transform:scale(1); opacity:1; }
+}
+@keyframes rollFlashGlow{
+  0%{ text-shadow: 0 0 20px rgba(216,190,133,0.7), 0 0 44px rgba(184,147,63,0.5); }
+  100%{ text-shadow: 0 0 34px rgba(216,190,133,1), 0 0 80px rgba(184,147,63,0.85); }
+}
+@keyframes rollFlashShake{
+  0%, 100%{ transform: translateX(0); }
+  25%{ transform: translateX(-6px) rotate(-1deg); }
+  75%{ transform: translateX(6px) rotate(1deg); }
+}
+
+.roll-banner{
+  position:fixed; top:0; left:0; right:0; z-index:200;
+  padding:12px 18px; text-align:center; cursor:pointer;
+  font-family:'JetBrains Mono', monospace; font-size:13px; letter-spacing:0.02em;
+  color:var(--parchment);
+  animation: rollBannerSlide 4.2s ease forwards;
+  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.4);
+}
+.roll-banner-critical{
+  background: linear-gradient(90deg, var(--wax), var(--gold), var(--wax));
+  background-size:200% 100%;
+  animation: rollBannerSlide 4.2s ease forwards, rollBannerShine 2s linear infinite;
+}
+.roll-banner-fumble{ background: var(--wax); }
+.roll-banner strong{ font-family:'Cinzel', serif; }
+
+@keyframes rollBannerSlide{
+  0%{ transform: translateY(-100%); opacity:0; }
+  8%{ transform: translateY(0); opacity:1; }
+  88%{ transform: translateY(0); opacity:1; }
+  100%{ transform: translateY(-100%); opacity:0; }
+}
+@keyframes rollBannerShine{
+  0%{ background-position: 0% 0; }
+  100%{ background-position: 200% 0; }
+}
