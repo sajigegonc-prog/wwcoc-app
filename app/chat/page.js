@@ -403,7 +403,6 @@ function ChatInner() {
       </div>
 
       <div className="card">
-      <div className="card">
         <div className="log-title">Turn {session?.turn_number || 1} — 判定ログ（記録後は誰も書き換え不可）</div>
         {turnRolls.length === 0 && <div className="empty-state">まだ誰も判定していません。</div>}
         {turnRolls.map(r => (
