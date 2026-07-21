@@ -148,7 +148,7 @@ input[type=text], input, select, textarea{
 .log-title{ font-family:'Cinzel', serif; font-size:16px; letter-spacing:0.03em; margin:0 0 12px; }
 .entry{ display:flex; justify-content:space-between; gap:12px; padding:12px 4px; border-bottom:1px solid var(--shadow); }
 .entry .who{ font-weight:600; color:var(--wax); white-space:nowrap; }
-.entry .what{ flex:1; }
+.entry .what{ flex:1; min-width:0; word-break:break-word; overflow-wrap:anywhere; }
 .entry .check{ color:var(--arcane); font-family:'JetBrains Mono', monospace; font-size:11px; white-space:nowrap; }
 
 .overlay{

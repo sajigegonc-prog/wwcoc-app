@@ -420,16 +420,25 @@ function ChatInner() {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-                <span className="who">{e.character_name}</span>
-                <span className="what" style={{ fontStyle: e.is_standby ? 'italic' : 'normal' }}>{e.text}</span>
-                <span className="check">{e.is_standby ? '待機 ー' : '確定済み ✓'}</span>
-                {e.user_id === userId && !e.is_standby && (
-                  <span style={{ display: 'flex', gap: 6 }}>
-                    <button className="plain" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => startEdit(e)}>修正</button>
-                    <button className="plain" style={{ padding: '4px 10px', fontSize: 11, borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteEntry(e.id)}>取消</button>
-                  </span>
-                )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <span className="who">{e.character_name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="check">{e.is_standby ? '待機 ー' : '確定済み ✓'}</span>
+                    {e.user_id === userId && !e.is_standby && (
+                      <span style={{ display: 'flex', gap: 6 }}>
+                        <button className="plain" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => startEdit(e)}>修正</button>
+                        <button className="plain" style={{ padding: '4px 10px', fontSize: 11, borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteEntry(e.id)}>取消</button>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div
+                  className="what"
+                  style={{ fontStyle: e.is_standby ? 'italic' : 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                >
+                  {e.text}
+                </div>
               </div>
             )}
           </div>
@@ -447,9 +456,9 @@ function ChatInner() {
         <div className="log-title">Turn {session?.turn_number || 1} — 判定ログ（記録後は誰も書き換え不可）</div>
         {turnRolls.length === 0 && <div className="empty-state">まだ誰も判定していません。</div>}
         {turnRolls.map(r => (
-          <div key={r.id} className="entry" style={{ opacity: r.voided ? 0.5 : 1 }}>
+          <div key={r.id} className="entry" style={{ opacity: r.voided ? 0.5 : 1, flexWrap: 'wrap', rowGap: 4 }}>
             <span className="who">{r.character_name}</span>
-            <span className="what">
+            <span className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
               {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : '1D100'} → 出目 {r.roll}
             </span>
             <span className="check">{r.result || '出目のみ'}{r.voided ? '（取り消し）' : ''}</span>
