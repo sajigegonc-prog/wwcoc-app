@@ -120,7 +120,7 @@ function ChatInner() {
       .subscribe(async (status, err) => {
         console.log('[realtime] channel status:', status, err || '')
         if (status === 'SUBSCRIBED') {
-          await channel.track({ character_name: displayName(character), role: role || 'player', avatar: character?.avatar || null })
+          await channel.track({ character_name: displayName(character), role: role || 'player' })
         }
       })
     channelRef.current = channel
@@ -130,7 +130,7 @@ function ChatInner() {
   // keep presence info up to date once character/role finish loading (or change)
   useEffect(() => {
     if (!channelRef.current) return
-    channelRef.current.track({ character_name: displayName(character), role: role || 'player', avatar: character?.avatar || null })
+    channelRef.current.track({ character_name: displayName(character), role: role || 'player' })
   }, [character, role])
 
   async function confirmAction(standby) {
@@ -328,22 +328,9 @@ function ChatInner() {
                 background: p.role === 'host' ? 'var(--wax)' : 'var(--arcane)',
                 color: 'var(--parchment)',
                 fontSize: 12,
-                padding: '4px 12px 4px 4px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
+                padding: '4px 12px',
               }}
             >
-              {p.avatar?.src && (
-                <span
-                  style={{
-                    width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                    backgroundImage: `url(${p.avatar.src})`,
-                    backgroundSize: `${(p.avatar.zoom || 1) * 100}%`,
-                    backgroundPosition: `${p.avatar.posX ?? 50}% ${p.avatar.posY ?? 50}%`,
-                  }}
-                />
-              )}
               {p.character_name}{p.role === 'host' ? '（HOST）' : ''}
             </span>
           ))}
