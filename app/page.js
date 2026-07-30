@@ -9,10 +9,8 @@ export default function Home() {
   return (
     <div className="wrap narrow">
       <div className="top-hero">
-        <div className="crest">🦉</div>
-        <div className="eyebrow" style={{ justifyContent: 'center' }}>WWCoC AI TRPG</div>
-        <h1>探索者たちよ、集え</h1>
-        <p className="sub">セッションを始める前に、まず選ぶところから。</p>
+        <h1>WWCoC セッション管理アプリ</h1>
+        <p className="sub">ハリー・ポッター×クトゥルフ神話TRPGを、AI KPと一緒に遊ぶための卓管理アプリ。</p>
       </div>
       <div className="top-menu">
         <Link href="/select?flow=host" className="top-btn primary">
