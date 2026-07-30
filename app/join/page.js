@@ -26,11 +26,22 @@ export default function Join() {
       if (error) throw error
 
       const characterId = localStorage.getItem('wwcoc_character_id')
+      let initStats = {}
+      if (characterId) {
+        const { data: charData } = await supabase.from('characters').select('parsed').eq('id', characterId).single()
+        const stats = charData?.parsed?.stats || {}
+        initStats = {
+          hp_current: parseInt(stats.HP, 10) || null,
+          san_current: parseInt(stats.SAN, 10) || null,
+          mp_current: parseInt(stats.MP, 10) || null,
+        }
+      }
       await supabase.from('session_participants').insert({
         session_id: sessionId,
         character_id: characterId,
         user_id: user.id,
         role: 'player',
+        ...initStats,
       })
       localStorage.setItem('wwcoc_session_id', sessionId)
       localStorage.setItem('wwcoc_role', 'player')

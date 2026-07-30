@@ -1,6 +1,7 @@
 'use client'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { ensureAnonUser } from '../../lib/auth'
 
@@ -20,9 +21,17 @@ function ChatInner() {
   const [editText, setEditText] = useState('')
   const [turnRolls, setTurnRolls] = useState([])
   const [participants, setParticipants] = useState([])
-  const [participantAvatars, setParticipantAvatars] = useState({})
   const [ready, setReady] = useState(false)
+  const [npcDraft, setNpcDraft] = useState('')
+  const [editingNpc, setEditingNpc] = useState(false)
   const channelRef = useRef(null)
+
+  async function saveNpcNotes() {
+    const { error } = await supabase.from('sessions').update({ npc_notes: npcDraft }).eq('id', sessionId)
+    if (error) { alert('保存に失敗しました: ' + error.message); return }
+    setSession(prev => ({ ...prev, npc_notes: npcDraft }))
+    setEditingNpc(false)
+  }
 
   function displayName(c) {
     return c?.parsed?.firstName || c?.name || '無名の探索者'
@@ -127,18 +136,45 @@ function ChatInner() {
 
   // Fetch everyone's avatar via a normal REST query (NOT the realtime channel) —
   // this keeps the presence/broadcast payload small while still letting us show icons.
+  const [participantsData, setParticipantsData] = useState([])
+
+  async function loadParticipantsData() {
+    const { data } = await supabase
+      .from('session_participants')
+      .select('id, user_id, role, hp_current, san_current, mp_current, characters(name, avatar, parsed)')
+      .eq('session_id', sessionId)
+    const rows = (data || []).map(row => ({
+      participantId: row.id,
+      user_id: row.user_id,
+      role: row.role,
+      hp: row.hp_current,
+      san: row.san_current,
+      mp: row.mp_current,
+      hpMax: parseInt(row.characters?.parsed?.stats?.HP, 10) || null,
+      sanMax: parseInt(row.characters?.parsed?.stats?.SAN, 10) || null,
+      mpMax: parseInt(row.characters?.parsed?.stats?.MP, 10) || null,
+      name: row.characters?.parsed?.firstName || row.characters?.name || '無名の探索者',
+      avatar: row.characters?.avatar || null,
+    }))
+    setParticipantsData(rows)
+  }
+
   useEffect(() => {
     if (!sessionId || !ready) return
-    (async () => {
-      const { data } = await supabase
-        .from('session_participants')
-        .select('user_id, characters(avatar)')
-        .eq('session_id', sessionId)
-      const map = {}
-      ;(data || []).forEach(row => { if (row.characters?.avatar) map[row.user_id] = row.characters.avatar })
-      setParticipantAvatars(map)
-    })()
+    loadParticipantsData()
   }, [sessionId, ready, participants.length])
+
+  async function adjustStat(field, delta) {
+    const mine = participantsData.find(p => p.user_id === userId)
+    if (!mine) return
+    const maxVal = field === 'hp' ? mine.hpMax : field === 'san' ? mine.sanMax : mine.mpMax
+    const current = mine[field] ?? 0
+    const next = Math.max(0, Math.min(maxVal ?? 9999, current + delta))
+    setParticipantsData(prev => prev.map(p => p.user_id === userId ? { ...p, [field]: next } : p))
+    const column = field + '_current'
+    const { error } = await supabase.from('session_participants').update({ [column]: next }).eq('id', mine.participantId)
+    if (error) alert('更新に失敗しました: ' + error.message)
+  }
 
   // keep presence info up to date once character/role finish loading (or change)
   useEffect(() => {
@@ -155,6 +191,7 @@ function ChatInner() {
       loadSession().then(s => {
         loadEntries()
         loadRolls(s?.turn_number || 1)
+        loadParticipantsData()
       })
     }, 2500)
     return () => clearInterval(interval)
@@ -323,7 +360,10 @@ function ChatInner() {
         ← トップへ戻る（セッション退出）
       </div>
       <div className="eyebrow">WWCoC / 行動宣言チャット</div>
-      <h1 className="small">行動宣言チャット</h1>
+      <div className="row-between" style={{ marginBottom: 4 }}>
+        <h1 className="small" style={{ margin: 0 }}>行動宣言チャット</h1>
+        <Link href={`/history?session=${sessionId}`} className="plain">📖 全ターン履歴</Link>
+      </div>
 
       <div className="row-between">
         <div className="selected-strip" style={{ flex: 1 }}>
@@ -362,6 +402,59 @@ function ChatInner() {
             </span>
           ))}
         </div>
+      </div>
+
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div className="mono small-text" style={{ marginBottom: 10 }}>ステータス</div>
+        {participantsData.length === 0 && <span className="dim">読み込み中…</span>}
+        {participantsData.map(p => (
+          <div key={p.participantId} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid var(--shadow)', flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: "'Cinzel', serif", fontSize: 13, minWidth: 70 }}>{p.name}</span>
+            {['hp', 'san', 'mp'].map(field => (
+              <span key={field} style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
+                {field.toUpperCase()}
+                {p.user_id === userId ? (
+                  <>
+                    <button className="plain" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => adjustStat(field, -1)}>−</button>
+                    <span style={{ minWidth: 20, textAlign: 'center' }}>{p[field] ?? '—'}</span>
+                    <button className="plain" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => adjustStat(field, 1)}>＋</button>
+                  </>
+                ) : (
+                  <span style={{ minWidth: 20, textAlign: 'center' }}>{p[field] ?? '—'}</span>
+                )}
+                / {p[field + 'Max'] ?? '—'}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div className="mono small-text" style={{ marginBottom: 8 }}>NPCメモ</div>
+        {isHost && editingNpc ? (
+          <>
+            <textarea
+              value={npcDraft}
+              onChange={e => setNpcDraft(e.target.value)}
+              style={{ minHeight: 80, width: '100%' }}
+            />
+            <div className="actions">
+              <button className="plain" onClick={() => setEditingNpc(false)}>キャンセル</button>
+              <button className="plain primary" onClick={saveNpcNotes}>保存</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 14, whiteSpace: 'pre-wrap', color: session?.npc_notes ? 'var(--ink)' : 'var(--ink-soft)', fontStyle: session?.npc_notes ? 'normal' : 'italic' }}>
+              {session?.npc_notes || 'まだメモがありません'}
+            </div>
+            {isHost && (
+              <div className="actions">
+                <button className="plain" onClick={() => { setNpcDraft(session?.npc_notes || ''); setEditingNpc(true) }}>編集</button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {isHost && (
@@ -448,17 +541,20 @@ function ChatInner() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                   <span className="who" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    {participantAvatars[e.user_id]?.src && (
-                      <span
-                        style={{
-                          width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                          border: '1px solid var(--gold-soft)',
-                          backgroundImage: `url(${participantAvatars[e.user_id].src})`,
-                          backgroundSize: `${(participantAvatars[e.user_id].zoom || 1) * 100}%`,
-                          backgroundPosition: `${participantAvatars[e.user_id].posX ?? 50}% ${participantAvatars[e.user_id].posY ?? 50}%`,
-                        }}
-                      />
-                    )}
+                    {(() => {
+                      const av = participantsData.find(p => p.user_id === e.user_id)?.avatar
+                      return av?.src ? (
+                        <span
+                          style={{
+                            width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                            border: '1px solid var(--gold-soft)',
+                            backgroundImage: `url(${av.src})`,
+                            backgroundSize: `${(av.zoom || 1) * 100}%`,
+                            backgroundPosition: `${av.posX ?? 50}% ${av.posY ?? 50}%`,
+                          }}
+                        />
+                      ) : null
+                    })()}
                     {e.character_name}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
