@@ -11,6 +11,7 @@ export default function Solo() {
   const [character, setCharacter] = useState(null)
   const [skillChoice, setSkillChoice] = useState('')
   const [log, setLog] = useState([])
+  const [copyPreview, setCopyPreview] = useState('')
 
   useEffect(() => {
     (async () => {
@@ -44,6 +45,35 @@ export default function Solo() {
   function rollPlain() {
     const roll = rollD100()
     setLog(prev => [{ id: Date.now(), skillName: null, skillValue: null, roll, result: null }, ...prev])
+  }
+
+  function formatEntry(r) {
+    const label = r.skillName ? `${r.skillName}${r.skillValue}` : '1D100'
+    const result = r.result || '出目のみ'
+    return `${character?.name || '探索者'}：${label} → 出目 ${r.roll}（${result}）`
+  }
+
+  async function copyEntry(r) {
+    const text = formatEntry(r)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyPreview('')
+    } catch {
+      setCopyPreview(text)
+    }
+  }
+
+  async function copyLog() {
+    if (log.length === 0) return
+    const chronological = [...log].reverse()
+    const lines = chronological.map(formatEntry)
+    const text = lines.join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyPreview('')
+    } catch {
+      setCopyPreview(text)
+    }
   }
 
   const skillGroups = character?.parsed?.skills
@@ -94,16 +124,21 @@ export default function Solo() {
       </div>
 
       <div className="card">
-        <div className="log-title">判定ログ（この画面だけの記録）</div>
+        <div className="row-between" style={{ marginBottom: 0 }}>
+          <div className="log-title" style={{ marginBottom: 0 }}>判定ログ（この画面だけの記録）</div>
+          <button className="plain" onClick={copyLog} disabled={log.length === 0}>全部コピー</button>
+        </div>
         {log.length === 0 && <div className="empty-state">まだ判定していません。</div>}
         {log.map(r => (
-          <div key={r.id} className="entry" style={{ flexWrap: 'wrap', rowGap: 4 }}>
+          <div key={r.id} className="entry" style={{ flexWrap: 'wrap', rowGap: 4, alignItems: 'center' }}>
             <span className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
               {r.skillName ? `${r.skillName}${r.skillValue}` : '1D100'} → 出目 {r.roll}
             </span>
             <span className="check">{r.result ? resultLabel(r.result) : '出目のみ'}</span>
+            <button className="plain" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => copyEntry(r)}>コピー</button>
           </div>
         ))}
+        {copyPreview && <div className="copy-box">{copyPreview}</div>}
       </div>
     </div>
   )
