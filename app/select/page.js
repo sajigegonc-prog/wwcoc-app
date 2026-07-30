@@ -8,7 +8,7 @@ import { ensureAnonUser } from '../../lib/auth'
 function SelectInner() {
   const router = useRouter()
   const params = useSearchParams()
-  const flow = params.get('flow') === 'join' ? 'join' : 'host'
+  const flow = ['join', 'solo'].includes(params.get('flow')) ? params.get('flow') : 'host'
   const [characters, setCharacters] = useState([])
   const [selected, setSelected] = useState(null)
 
@@ -29,13 +29,14 @@ function SelectInner() {
     localStorage.setItem('wwcoc_character_id', selected.id)
     localStorage.setItem('wwcoc_character_name', selected.name)
     localStorage.setItem('wwcoc_flow', flow)
+    if (flow === 'solo') { router.push('/solo'); return }
     router.push(flow === 'host' ? '/host' : '/join')
   }
 
   return (
     <div className="wrap">
       <Link href="/" className="back-link">← トップへ戻る</Link>
-      <div className="eyebrow">WWCoC / 探索者選択（{flow === 'host' ? 'ホスト' : '参加'}）</div>
+      <div className="eyebrow">WWCoC / 探索者選択（{flow === 'host' ? 'ホスト' : flow === 'join' ? '参加' : 'ソロダイス'}）</div>
       <h1 className="small">使用する探索者を選ぶ</h1>
       <p className="sub">登録済みの探索者から、このセッションで使うキャラクターを選択してください。</p>
 

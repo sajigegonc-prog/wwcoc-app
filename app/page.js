@@ -27,10 +27,14 @@ export default function Home() {
           <div><div>探索者登録</div><span className="desc">探索者シートを事前に登録・管理する</span></div>
           <span className="arrow">→</span>
         </Link>
+        <Link href="/select?flow=solo" className="top-btn">
+          <div><div>ソロダイス</div><span className="desc">セッションを作らず、探索者を選んでダイスだけ振る</span></div>
+          <span className="arrow">→</span>
+        </Link>
       </div>
       <p style={{ textAlign: 'center', marginTop: 18 }}>
         <Link href="/login" className="back-link" style={{ display: 'inline-flex', justifyContent: 'center', margin: 0 }}>
-          別の端末で続ける（IDでログイン）
+          IDでログイン（データを復元／別の端末で続ける）
         </Link>
       </p>
     </div>
