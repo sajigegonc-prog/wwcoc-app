@@ -178,6 +178,7 @@ function ChatInner() {
 
   // ---------- セリフチャット（ターンでリセットされない） ----------
   const [dialogue, setDialogue] = useState([])
+  const [showDialogueChat, setShowDialogueChat] = useState(false)
   const [dialogueText, setDialogueText] = useState('')
 
   async function loadDialogue(turnNumber) {
@@ -634,77 +635,91 @@ function ChatInner() {
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="mono small-text" style={{ marginBottom: 10 }}>セリフチャット <span className="dim" style={{ fontSize: 11 }}>（このターンの行動に至るまでのロールプレイ。次のターンでリセット、AIコピーにも含まれます）</span></div>
-        <div style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 2px' }}>
-          {dialogue.length === 0 && <span className="dim">まだ発言がありません。</span>}
-          {dialogue.map(m => {
-            const mine = m.user_id === userId
-            const av = participantsData.find(p => p.user_id === m.user_id)?.avatar
-            return (
-              <div key={m.id} style={{ display: 'flex', flexDirection: mine ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 6 }}>
-                <div
-                  style={{
-                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                    border: '1px solid var(--gold-soft)', background: 'var(--paper)',
-                    backgroundImage: av?.src ? `url(${av.src})` : undefined,
-                    backgroundSize: av?.src ? `${(av.zoom || 1) * 100}%` : undefined,
-                    backgroundPosition: av?.src ? `${av.posX ?? 50}% ${av.posY ?? 50}%` : undefined,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontFamily: "'Cinzel', serif", fontSize: 12, color: 'var(--shadow)',
-                  }}
-                >
-                  {!av?.src && (m.character_name || '?').charAt(0)}
-                </div>
-                <div style={{ maxWidth: '72%', display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start' }}>
-                  {!mine && <span className="mono small-text" style={{ marginBottom: 2, fontSize: 10.5 }}>{m.character_name}</span>}
-                  {editingDialogueId === m.id ? (
-                    <div style={{ display: 'flex', gap: 6, width: '100%', minWidth: 160 }}>
-                      <input
-                        value={editDialogueText}
-                        onChange={e => setEditDialogueText(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveDialogueEdit(m.id) }}
-                        style={{ flex: 1, fontSize: 13 }}
-                        autoFocus
-                      />
-                      <button className="plain" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => saveDialogueEdit(m.id)}>✓</button>
-                      <button className="plain" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => setEditingDialogueId(null)}>×</button>
-                    </div>
-                  ) : (
+        <div
+          className="row-between"
+          style={{ marginBottom: showDialogueChat ? 10 : 0, cursor: 'pointer' }}
+          onClick={() => setShowDialogueChat(v => !v)}
+        >
+          <span className="mono small-text">
+            セリフチャット {dialogue.length > 0 && <span className="dim">（{dialogue.length}件）</span>}
+          </span>
+          <span className="plain" style={{ fontSize: 11, padding: '4px 10px' }}>{showDialogueChat ? '閉じる ▲' : '開く ▼'}</span>
+        </div>
+        {showDialogueChat && (
+          <>
+            <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>（このターンの行動に至るまでのロールプレイ。次のターンでリセット、AIコピーにも含まれます）</div>
+            <div style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 2px' }}>
+              {dialogue.length === 0 && <span className="dim">まだ発言がありません。</span>}
+              {dialogue.map(m => {
+                const mine = m.user_id === userId
+                const av = participantsData.find(p => p.user_id === m.user_id)?.avatar
+                return (
+                  <div key={m.id} style={{ display: 'flex', flexDirection: mine ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 6 }}>
                     <div
                       style={{
-                        background: mine ? 'var(--wax)' : 'var(--paper)',
-                        color: mine ? 'var(--parchment)' : 'var(--ink)',
-                        border: mine ? 'none' : '1px solid var(--shadow)',
-                        borderRadius: 14,
-                        padding: '8px 12px',
-                        fontSize: 14,
-                        wordBreak: 'break-word', overflowWrap: 'anywhere',
+                        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                        border: '1px solid var(--gold-soft)', background: 'var(--paper)',
+                        backgroundImage: av?.src ? `url(${av.src})` : undefined,
+                        backgroundSize: av?.src ? `${(av.zoom || 1) * 100}%` : undefined,
+                        backgroundPosition: av?.src ? `${av.posX ?? 50}% ${av.posY ?? 50}%` : undefined,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: "'Cinzel', serif", fontSize: 12, color: 'var(--shadow)',
                       }}
                     >
-                      {m.text}
+                      {!av?.src && (m.character_name || '?').charAt(0)}
                     </div>
-                  )}
-                  {mine && editingDialogueId !== m.id && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-                      <button onClick={() => startEditDialogue(m)} style={{ fontSize: 10, opacity: 0.45, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', padding: 0 }}>編集</button>
-                      <button onClick={() => deleteDialogue(m.id)} style={{ fontSize: 10, opacity: 0.45, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', padding: 0 }}>削除</button>
+                    <div style={{ maxWidth: '72%', display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start' }}>
+                      {!mine && <span className="mono small-text" style={{ marginBottom: 2, fontSize: 10.5 }}>{m.character_name}</span>}
+                      {editingDialogueId === m.id ? (
+                        <div style={{ display: 'flex', gap: 6, width: '100%', minWidth: 160 }}>
+                          <input
+                            value={editDialogueText}
+                            onChange={e => setEditDialogueText(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveDialogueEdit(m.id) }}
+                            style={{ flex: 1, fontSize: 13 }}
+                            autoFocus
+                          />
+                          <button className="plain" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => saveDialogueEdit(m.id)}>✓</button>
+                          <button className="plain" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => setEditingDialogueId(null)}>×</button>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            background: mine ? 'var(--wax)' : 'var(--paper)',
+                            color: mine ? 'var(--parchment)' : 'var(--ink)',
+                            border: mine ? 'none' : '1px solid var(--shadow)',
+                            borderRadius: 14,
+                            padding: '8px 12px',
+                            fontSize: 14,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere',
+                          }}
+                        >
+                          {m.text}
+                        </div>
+                      )}
+                      {mine && editingDialogueId !== m.id && (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                          <button onClick={() => startEditDialogue(m)} style={{ fontSize: 10, opacity: 0.45, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', padding: 0 }}>編集</button>
+                          <button onClick={() => deleteDialogue(m.id)} style={{ fontSize: 10, opacity: 0.45, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)', padding: 0 }}>削除</button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={dialogueText}
-            onChange={e => setDialogueText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
-            placeholder="セリフを入力…"
-            style={{ flex: 1 }}
-          />
-          <button className="plain primary" onClick={sendDialogue}>送信</button>
-        </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={dialogueText}
+                onChange={e => setDialogueText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
+                placeholder="セリフを入力…"
+                style={{ flex: 1 }}
+              />
+              <button className="plain primary" onClick={sendDialogue}>送信</button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="card">
