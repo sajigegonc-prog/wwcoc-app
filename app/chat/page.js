@@ -1056,6 +1056,22 @@ function ChatInner() {
           </div>
         </div>
       )}
+
+      {session?.status === 'ended' && (
+        <div className="overlay show">
+          <div className="sheet" style={{ maxWidth: 400 }}>
+            <div className="sheet-head">
+              <h2>探索が終了しました</h2>
+            </div>
+            <div className="sheet-body">
+              <p>ホストがこのセッションを終了しました。おつかれさまでした。</p>
+            </div>
+            <div className="sheet-actions">
+              <button className="plain primary" onClick={() => router.push('/')}>トップへ戻る</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
