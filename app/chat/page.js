@@ -17,6 +17,7 @@ function ChatInner() {
   const [text, setText] = useState('')
   const [dialogueLine, setDialogueLine] = useState('')
   const [customDiceChoice, setCustomDiceChoice] = useState(DICE_OPTIONS[2]?.label || '1D6')
+  const [showCustomDice, setShowCustomDice] = useState(false)
   const [skillChoice, setSkillChoice] = useState('')
   const [userId, setUserId] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -780,10 +781,17 @@ function ChatInner() {
 
         <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
           <button className="plain" onClick={rollPlainDice} disabled={!!myRollThisTurn}>🎲 1D100を振る（SAN値チェックなど）</button>
-          <select value={customDiceChoice} onChange={e => setCustomDiceChoice(e.target.value)} style={{ width: 90 }}>
-            {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
-          </select>
-          <button className="plain" onClick={rollCustomDice} disabled={!!myRollThisTurn}>🎲 振る（ダメージロールなど）</button>
+          {!showCustomDice && (
+            <button className="plain" style={{ fontSize: 11, opacity: 0.7 }} onClick={() => setShowCustomDice(true)}>他のダイス（1D6など） ▾</button>
+          )}
+          {showCustomDice && (
+            <>
+              <select value={customDiceChoice} onChange={e => setCustomDiceChoice(e.target.value)} style={{ width: 90 }}>
+                {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+              </select>
+              <button className="plain" onClick={rollCustomDice} disabled={!!myRollThisTurn}>🎲 振る（ダメージロールなど）</button>
+            </>
+          )}
           {myRollThisTurn && (
             <span className="mono small-text" style={{ alignSelf: 'center' }}>
               あなたの今ターンの判定：{myRollThisTurn.skill_name ? `${myRollThisTurn.skill_name}${myRollThisTurn.skill_value || ''} → ` : ''}
