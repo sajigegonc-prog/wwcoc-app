@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
-import { ensureAnonUser, createLoginCredentials, getCurrentLoginId } from '../../lib/auth'
+import { ensureAnonUser, createLoginCredentials, getCurrentLoginId, logout } from '../../lib/auth'
 import { parseSheetText, SAMPLE_TEXT } from '../../lib/parseSheet'
 
 export default function Register() {
@@ -68,6 +68,16 @@ export default function Register() {
       alert('発行に失敗しました: ' + err.message)
     } finally {
       setCreatingCreds(false)
+    }
+  }
+
+  async function handleLogout() {
+    if (!window.confirm('ログアウトしますか？ 再度このIDとパスワードでログインすれば、いつでも同じデータに戻れます。')) return
+    try {
+      await logout()
+      window.location.href = '/'
+    } catch (err) {
+      alert('ログアウトに失敗しました: ' + err.message)
     }
   }
 
@@ -166,6 +176,7 @@ export default function Register() {
           <p className="dim">
             発行済みのID：<strong className="mono" style={{ color: 'var(--ink)' }}>{loginId}</strong>　
             <Link href="/login" className="plain" style={{ display: 'inline-flex', marginLeft: 8 }}>IDでログイン</Link>
+            <button className="plain" style={{ display: 'inline-flex', marginLeft: 8, borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={handleLogout}>ログアウト</button>
             <br />
             このIDとパスワードがあれば、Cookieが消えた時だけでなく、友達のスマホや他のPCなど、別の端末からでも同じデータにログインできます。
           </p>
