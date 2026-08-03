@@ -179,11 +179,12 @@ function ChatInner() {
   const [dialogue, setDialogue] = useState([])
   const [dialogueText, setDialogueText] = useState('')
 
-  async function loadDialogue() {
+  async function loadDialogue(turnNumber) {
     const { data } = await supabase
       .from('session_dialogue')
       .select('*')
       .eq('session_id', sessionId)
+      .eq('turn_number', turnNumber ?? session?.turn_number ?? 1)
       .order('created_at')
     setDialogue(data || [])
   }
@@ -208,7 +209,6 @@ function ChatInner() {
   const [infoTabs, setInfoTabs] = useState([])
   const [activeTabId, setActiveTabId] = useState(null)
   const [infoEntries, setInfoEntries] = useState([])
-  const [newEntryTitle, setNewEntryTitle] = useState('')
   const [newEntryContent, setNewEntryContent] = useState('')
 
   const activeTab = infoTabs.find(t => t.id === activeTabId) || null
@@ -269,15 +269,13 @@ function ChatInner() {
   }
 
   async function addEntry() {
-    if (!newEntryTitle.trim()) { alert('項目名を入力してください'); return }
+    if (!newEntryContent.trim()) { alert('内容を入力してください'); return }
     const { error } = await supabase.from('info_entries').insert({
       tab_id: activeTabId,
       session_id: sessionId,
-      title: newEntryTitle.trim(),
-      content: newEntryContent.trim() || null,
+      content: newEntryContent.trim(),
     })
     if (error) { alert('追加に失敗しました: ' + error.message); return }
-    setNewEntryTitle('')
     setNewEntryContent('')
     loadInfoEntries(activeTabId)
   }
@@ -312,15 +310,15 @@ function ChatInner() {
   // just makes it feel faster in between polls).
   useEffect(() => {
     if (!sessionId || !ready) return
-    loadDialogue()
+    loadDialogue(session?.turn_number || 1)
     loadInfoTabs()
     const interval = setInterval(() => {
       loadSession().then(s => {
         loadEntries()
         loadRolls(s?.turn_number || 1)
         loadParticipantsData()
+        loadDialogue(s?.turn_number || 1)
       })
-      loadDialogue()
       loadInfoTabs()
       loadInfoEntries(activeTabId)
     }, 2500)
@@ -454,6 +452,7 @@ function ChatInner() {
     setSession(data[0])
     setEntries([])
     setTurnRolls([])
+    setDialogue([])
   }
 
   async function endSession() {
@@ -470,10 +469,13 @@ function ChatInner() {
       return dexB - dexA
     })
     const body = sorted.map(e => {
-      const dialoguePart = e.dialogue ? `\n「${e.dialogue}」` : ''
-      return `${e.full_name || e.character_name}：\n${e.text}${dialoguePart}`
+      const dialoguePart = e.dialogue ? `「${e.dialogue}」\n` : ''
+      return `${e.full_name || e.character_name}：\n${dialoguePart}${e.text}`
     }).join('\n\n')
-    const full = `【探索者行動】（DEX順）\n\n今回のターン行動：\n\n${body}\n\n以上。\nこの行動を処理してください。`
+    const rpPart = dialogue.length > 0
+      ? `【このターンのロールプレイ】\n\n${dialogue.map(m => `${m.character_name}：「${m.text}」`).join('\n')}\n\n`
+      : ''
+    const full = `${rpPart}【探索者行動】（DEX順）\n\n今回のターン行動：\n\n${body}\n\n以上。\nこの行動を処理してください。`
     try {
       await navigator.clipboard.writeText(full)
       alert('コピーしました')
@@ -552,7 +554,7 @@ function ChatInner() {
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="mono small-text" style={{ marginBottom: 10 }}>セリフチャット <span className="dim" style={{ fontSize: 11 }}>（行動前の相談・演技用。ターンをまたいでも残ります）</span></div>
+        <div className="mono small-text" style={{ marginBottom: 10 }}>セリフチャット <span className="dim" style={{ fontSize: 11 }}>（このターンの行動に至るまでのロールプレイ。次のターンでリセット、AIコピーにも含まれます）</span></div>
         <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {dialogue.length === 0 && <span className="dim">まだ発言がありません。</span>}
           {dialogue.map(m => (
@@ -640,16 +642,10 @@ function ChatInner() {
 
                 {isHost && (
                   <div className="card" style={{ padding: 12, marginBottom: 14, background: 'var(--paper)' }}>
-                    <input
-                      value={newEntryTitle}
-                      onChange={e => setNewEntryTitle(e.target.value)}
-                      placeholder="項目名（例：温室のトゲ）"
-                      style={{ marginBottom: 8 }}
-                    />
                     <textarea
                       value={newEntryContent}
                       onChange={e => setNewEntryContent(e.target.value)}
-                      placeholder="内容（例：触れると眠り毒。手袋があれば安全）"
+                      placeholder="内容（例：温室のトゲに触れると眠り毒。手袋があれば安全）"
                       style={{ minHeight: 60, width: '100%', marginBottom: 8 }}
                     />
                     <div className="actions" style={{ marginTop: 0 }}>
@@ -664,8 +660,16 @@ function ChatInner() {
                   const iKnow = shares.some(s => s.user_id === userId)
                   return (
                     <div key={entry.id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                      <div
+                        className="what"
+                        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
+                      >
+                        {entry.content}
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                        <span className="who">{entry.title}</span>
+                        <span className="mono small-text">
+                          知っている探索者：{shares.length > 0 ? shares.map(s => s.character_name).join('、') : 'まだ誰も'}
+                        </span>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button
                             className="plain"
@@ -678,12 +682,6 @@ function ChatInner() {
                             <button className="plain" style={{ fontSize: 11, padding: '4px 10px', borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteInfoEntry(entry.id)}>削除</button>
                           )}
                         </div>
-                      </div>
-                      {entry.content && (
-                        <div className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{entry.content}</div>
-                      )}
-                      <div className="mono small-text">
-                        知っている探索者：{shares.length > 0 ? shares.map(s => s.character_name).join('、') : 'まだ誰も'}
                       </div>
                     </div>
                   )
@@ -708,13 +706,7 @@ function ChatInner() {
           <span className="mono small-text">今回の行動を入力</span>
           <span className="turn-badge">TURN {session?.turn_number || 1}</span>
         </div>
-        <textarea
-          className="transcript-input"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          placeholder="ここに行動宣言を入力してください…"
-        />
-        <div className="ffield" style={{ marginTop: 10, marginBottom: 0 }}>
+        <div className="ffield" style={{ marginTop: 10, marginBottom: 10 }}>
           <label>セリフ（任意）</label>
           <input
             value={dialogueLine}
@@ -722,6 +714,12 @@ function ChatInner() {
             placeholder="例：「気をつけて、何かいる……」"
           />
         </div>
+        <textarea
+          className="transcript-input"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="ここに行動宣言を入力してください…"
+        />
 
         {skillGroups && (skillGroups.explore?.length || skillGroups.social?.length || skillGroups.action?.length) ? (
           <div className="actions" style={{ justifyContent: 'flex-start' }}>
@@ -813,17 +811,17 @@ function ChatInner() {
                     )}
                   </div>
                 </div>
+                {e.dialogue && (
+                  <div style={{ fontStyle: 'italic', color: 'var(--arcane)', fontSize: 13.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                    「{e.dialogue}」
+                  </div>
+                )}
                 <div
                   className="what"
                   style={{ fontStyle: e.is_standby ? 'italic' : 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                 >
                   {e.text}
                 </div>
-                {e.dialogue && (
-                  <div style={{ fontStyle: 'italic', color: 'var(--arcane)', fontSize: 13.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                    「{e.dialogue}」
-                  </div>
-                )}
               </div>
             )}
           </div>
