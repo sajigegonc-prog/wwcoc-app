@@ -15,7 +15,6 @@ function ChatInner() {
   const [session, setSession] = useState(null)
   const [entries, setEntries] = useState([])
   const [text, setText] = useState('')
-  const [dialogueLine, setDialogueLine] = useState('')
   const [skillChoice, setSkillChoice] = useState('')
   const [userId, setUserId] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -23,7 +22,16 @@ function ChatInner() {
   const [turnRolls, setTurnRolls] = useState([])
   const [participants, setParticipants] = useState([])
   const [ready, setReady] = useState(false)
+  const [npcDraft, setNpcDraft] = useState('')
+  const [editingNpc, setEditingNpc] = useState(false)
   const channelRef = useRef(null)
+
+  async function saveNpcNotes() {
+    const { error } = await supabase.from('sessions').update({ npc_notes: npcDraft }).eq('id', sessionId)
+    if (error) { alert('保存に失敗しました: ' + error.message); return }
+    setSession(prev => ({ ...prev, npc_notes: npcDraft }))
+    setEditingNpc(false)
+  }
 
   function displayName(c) {
     return c?.parsed?.firstName || c?.name || '無名の探索者'
@@ -145,7 +153,6 @@ function ChatInner() {
       hpMax: parseInt(row.characters?.parsed?.stats?.HP, 10) || null,
       sanMax: parseInt(row.characters?.parsed?.stats?.SAN, 10) || null,
       mpMax: parseInt(row.characters?.parsed?.stats?.MP, 10) || null,
-      dex: parseInt(row.characters?.parsed?.stats?.DEX, 10) || 0,
       name: row.characters?.parsed?.firstName || row.characters?.name || '無名の探索者',
       avatar: row.characters?.avatar || null,
     }))
@@ -175,157 +182,20 @@ function ChatInner() {
     channelRef.current.track({ character_name: displayName(character), role: role || 'player' })
   }, [character, role])
 
-  // ---------- セリフチャット（ターンでリセットされない） ----------
-  const [dialogue, setDialogue] = useState([])
-  const [dialogueText, setDialogueText] = useState('')
-
-  async function loadDialogue() {
-    const { data } = await supabase
-      .from('session_dialogue')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at')
-    setDialogue(data || [])
-  }
-
-  async function sendDialogue() {
-    const body = dialogueText.trim()
-    if (!body) return
-    const who = displayName(character)
-    const { data, error } = await supabase.from('session_dialogue').insert({
-      session_id: sessionId,
-      turn_number: session?.turn_number || 1,
-      user_id: userId,
-      character_name: who,
-      text: body,
-    }).select().single()
-    if (error) { alert('送信に失敗しました: ' + error.message); return }
-    setDialogue(prev => [...prev, data])
-    setDialogueText('')
-  }
-
-  // ---------- 情報共有ボード ----------
-  const [infoTabs, setInfoTabs] = useState([])
-  const [activeTabId, setActiveTabId] = useState(null)
-  const [infoEntries, setInfoEntries] = useState([])
-  const [newEntryTitle, setNewEntryTitle] = useState('')
-  const [newEntryContent, setNewEntryContent] = useState('')
-
-  const activeTab = infoTabs.find(t => t.id === activeTabId) || null
-
-  async function loadInfoTabs() {
-    const { data } = await supabase
-      .from('info_tabs')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('sort_order')
-      .order('created_at')
-    setInfoTabs(data || [])
-    if (data && data.length > 0 && !data.some(t => t.id === activeTabId)) {
-      setActiveTabId(data[0].id)
-    }
-  }
-
-  async function loadInfoEntries(tabId) {
-    if (!tabId) { setInfoEntries([]); return }
-    const { data } = await supabase
-      .from('info_entries')
-      .select('*, info_shares(user_id, character_name)')
-      .eq('tab_id', tabId)
-      .order('created_at')
-    setInfoEntries(data || [])
-  }
-
-  useEffect(() => {
-    loadInfoEntries(activeTabId)
-  }, [activeTabId])
-
-  async function addTab() {
-    const name = prompt('タブ名を入力してください（例：弱点、場所描写）')
-    if (!name || !name.trim()) return
-    const { error } = await supabase.from('info_tabs').insert({
-      session_id: sessionId,
-      name: name.trim(),
-      sort_order: infoTabs.length,
-    })
-    if (error) { alert('作成に失敗しました: ' + error.message); return }
-    loadInfoTabs()
-  }
-
-  async function renameTab(tab) {
-    const name = prompt('新しいタブ名', tab.name)
-    if (!name || !name.trim()) return
-    const { error } = await supabase.from('info_tabs').update({ name: name.trim() }).eq('id', tab.id)
-    if (error) { alert('変更に失敗しました: ' + error.message); return }
-    loadInfoTabs()
-  }
-
-  async function deleteTab(tab) {
-    if (!window.confirm(`「${tab.name}」タブを削除しますか？中の項目も全て消えます。`)) return
-    const { error } = await supabase.from('info_tabs').delete().eq('id', tab.id)
-    if (error) { alert('削除に失敗しました: ' + error.message); return }
-    setActiveTabId(null)
-    loadInfoTabs()
-  }
-
-  async function addEntry() {
-    if (!newEntryTitle.trim()) { alert('項目名を入力してください'); return }
-    const { error } = await supabase.from('info_entries').insert({
-      tab_id: activeTabId,
-      session_id: sessionId,
-      title: newEntryTitle.trim(),
-      content: newEntryContent.trim() || null,
-    })
-    if (error) { alert('追加に失敗しました: ' + error.message); return }
-    setNewEntryTitle('')
-    setNewEntryContent('')
-    loadInfoEntries(activeTabId)
-  }
-
-  async function deleteInfoEntry(id) {
-    if (!window.confirm('この項目を削除しますか？')) return
-    const { error } = await supabase.from('info_entries').delete().eq('id', id)
-    if (error) { alert('削除に失敗しました: ' + error.message); return }
-    loadInfoEntries(activeTabId)
-  }
-
-  async function toggleShare(entry) {
-    const shares = entry.info_shares || []
-    const mine = shares.find(s => s.user_id === userId)
-    if (mine) {
-      const { error } = await supabase.from('info_shares').delete().eq('entry_id', entry.id).eq('user_id', userId)
-      if (error) { alert('更新に失敗しました: ' + error.message); return }
-    } else {
-      const { error } = await supabase.from('info_shares').insert({
-        entry_id: entry.id,
-        session_id: sessionId,
-        user_id: userId,
-        character_name: displayName(character),
-      })
-      if (error) { alert('更新に失敗しました: ' + error.message); return }
-    }
-    loadInfoEntries(activeTabId)
-  }
-
   // Realtime push has proven unreliable in practice. Poll as the primary sync
   // mechanism so both sides reliably stay in sync (realtime, when it works,
   // just makes it feel faster in between polls).
   useEffect(() => {
     if (!sessionId || !ready) return
-    loadDialogue()
-    loadInfoTabs()
     const interval = setInterval(() => {
       loadSession().then(s => {
         loadEntries()
         loadRolls(s?.turn_number || 1)
         loadParticipantsData()
       })
-      loadDialogue()
-      loadInfoTabs()
-      loadInfoEntries(activeTabId)
     }, 2500)
     return () => clearInterval(interval)
-  }, [sessionId, ready, activeTabId])
+  }, [sessionId, ready])
 
   async function confirmAction(standby) {
     const who = displayName(character)
@@ -337,14 +207,12 @@ function ChatInner() {
       character_name: who,
       full_name: character?.name || who,
       text: body,
-      dialogue: dialogueLine.trim() || null,
       is_standby: standby,
       user_id: userId,
     }).select().single()
     if (error) { alert('送信に失敗しました: ' + error.message); return }
     setEntries(prev => prev.some(e => e.id === data.id) ? prev : [...prev, data])
     setText('')
-    setDialogueLine('')
   }
 
   function startEdit(entry) {
@@ -380,14 +248,13 @@ function ChatInner() {
 
   const myRollThisTurn = turnRolls.find(r => r.user_id === userId && !r.voided)
 
-  async function performRoll(skillName, skillValue, diceType = '1d100') {
+  async function performRoll(skillName, skillValue) {
     if (myRollThisTurn) {
       alert(`このターンは既に判定済みです（${myRollThisTurn.skill_name ? myRollThisTurn.skill_name + '：' : ''}${myRollThisTurn.roll}${myRollThisTurn.result ? ' → ' + myRollThisTurn.result : '（出目のみ）'}）`)
       return
     }
-    const sides = diceType === '1d6' ? 6 : 100
-    const roll = Math.floor(Math.random() * sides) + 1
-    const hasValue = diceType === '1d100' && skillValue !== null && skillValue !== '' && !isNaN(parseInt(skillValue, 10))
+    const roll = Math.floor(Math.random() * 100) + 1
+    const hasValue = skillValue !== null && skillValue !== '' && !isNaN(parseInt(skillValue, 10))
     const result = hasValue ? judgeResult(roll, skillValue) : null
     const { data, error } = await supabase.from('dice_rolls').insert({
       session_id: sessionId,
@@ -396,7 +263,6 @@ function ChatInner() {
       character_name: displayName(character),
       skill_name: skillName || null,
       skill_value: hasValue ? skillValue : null,
-      dice_type: diceType,
       roll,
       result,
     }).select().single()
@@ -410,10 +276,9 @@ function ChatInner() {
       return
     }
     setTurnRolls(prev => [...prev, data])
-    const diceLabel = diceType === '1d6' ? '1D6' : '1D100'
     const tag = skillName
       ? (hasValue ? `［${skillName}${skillValue}で判定：${roll} → ${result}］` : `［${skillName}：出目 ${roll}（判定基準未入力）］`)
-      : `［${diceLabel}：${roll}］`
+      : `［1D100：${roll}］`
     setText(t => (t ? t + ' ' + tag : tag))
   }
 
@@ -433,11 +298,7 @@ function ChatInner() {
   }
 
   function rollPlainDice() {
-    performRoll(null, null, '1d100')
-  }
-
-  function rollPlainD6() {
-    performRoll(null, null, '1d6')
+    performRoll(null, null)
   }
 
   async function nextTurn() {
@@ -464,16 +325,8 @@ function ChatInner() {
 
   async function copyToAI() {
     if (entries.length === 0) { alert('確定した行動がありません'); return }
-    const sorted = [...entries].sort((a, b) => {
-      const dexA = participantsData.find(p => p.user_id === a.user_id)?.dex ?? 0
-      const dexB = participantsData.find(p => p.user_id === b.user_id)?.dex ?? 0
-      return dexB - dexA
-    })
-    const body = sorted.map(e => {
-      const dialoguePart = e.dialogue ? `\n「${e.dialogue}」` : ''
-      return `${e.full_name || e.character_name}：\n${e.text}${dialoguePart}`
-    }).join('\n\n')
-    const full = `【探索者行動】（DEX順）\n\n今回のターン行動：\n\n${body}\n\n以上。\nこの行動を処理してください。`
+    const body = entries.map(e => `${e.full_name || e.character_name}：\n${e.text}`).join('\n\n')
+    const full = `【探索者行動】\n\n今回のターン行動：\n\n${body}\n\n以上。\nこの行動を処理してください。`
     try {
       await navigator.clipboard.writeText(full)
       alert('コピーしました')
@@ -552,29 +405,6 @@ function ChatInner() {
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="mono small-text" style={{ marginBottom: 10 }}>セリフチャット <span className="dim" style={{ fontSize: 11 }}>（行動前の相談・演技用。ターンをまたいでも残ります）</span></div>
-        <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {dialogue.length === 0 && <span className="dim">まだ発言がありません。</span>}
-          {dialogue.map(m => (
-            <div key={m.id} style={{ fontSize: 14 }}>
-              <span className="who" style={{ marginRight: 6 }}>{m.character_name}</span>
-              <span style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>「{m.text}」</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={dialogueText}
-            onChange={e => setDialogueText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
-            placeholder="セリフを入力…"
-            style={{ flex: 1 }}
-          />
-          <button className="plain primary" onClick={sendDialogue}>送信</button>
-        </div>
-      </div>
-
-      <div className="card" style={{ padding: '16px 20px' }}>
         <div className="mono small-text" style={{ marginBottom: 10 }}>ステータス</div>
         {participantsData.length === 0 && <span className="dim">読み込み中…</span>}
         {participantsData.map(p => (
@@ -600,95 +430,28 @@ function ChatInner() {
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="row-between" style={{ marginBottom: 10 }}>
-          <span className="mono small-text">情報共有ボード</span>
-          {isHost && (
-            <button className="plain" style={{ fontSize: 11, padding: '4px 10px' }} onClick={addTab}>＋ タブ追加</button>
-          )}
-        </div>
-
-        {infoTabs.length === 0 && <div className="dim">まだタブがありません。{isHost ? '「＋ タブ追加」から作成してください。' : ''}</div>}
-
-        {infoTabs.length > 0 && (
+        <div className="mono small-text" style={{ marginBottom: 8 }}>NPCメモ</div>
+        {isHost && editingNpc ? (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-              {infoTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  className="plain"
-                  style={{
-                    fontSize: 12, padding: '5px 12px',
-                    background: activeTabId === tab.id ? 'var(--wax)' : 'transparent',
-                    color: activeTabId === tab.id ? 'var(--parchment)' : 'var(--ink)',
-                    borderColor: activeTabId === tab.id ? 'var(--wax)' : 'var(--ink-soft)',
-                  }}
-                  onClick={() => setActiveTabId(tab.id)}
-                >
-                  {tab.name}
-                </button>
-              ))}
+            <textarea
+              value={npcDraft}
+              onChange={e => setNpcDraft(e.target.value)}
+              style={{ minHeight: 80, width: '100%' }}
+            />
+            <div className="actions">
+              <button className="plain" onClick={() => setEditingNpc(false)}>キャンセル</button>
+              <button className="plain primary" onClick={saveNpcNotes}>保存</button>
             </div>
-
-            {activeTab && (
-              <>
-                {isHost && (
-                  <div className="row-between" style={{ marginBottom: 10 }}>
-                    <button className="plain" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => renameTab(activeTab)}>タブ名を変更</button>
-                    <button className="plain" style={{ fontSize: 11, padding: '4px 10px', borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteTab(activeTab)}>タブを削除</button>
-                  </div>
-                )}
-
-                {isHost && (
-                  <div className="card" style={{ padding: 12, marginBottom: 14, background: 'var(--paper)' }}>
-                    <input
-                      value={newEntryTitle}
-                      onChange={e => setNewEntryTitle(e.target.value)}
-                      placeholder="項目名（例：温室のトゲ）"
-                      style={{ marginBottom: 8 }}
-                    />
-                    <textarea
-                      value={newEntryContent}
-                      onChange={e => setNewEntryContent(e.target.value)}
-                      placeholder="内容（例：触れると眠り毒。手袋があれば安全）"
-                      style={{ minHeight: 60, width: '100%', marginBottom: 8 }}
-                    />
-                    <div className="actions" style={{ marginTop: 0 }}>
-                      <button className="plain primary" onClick={addEntry}>この項目を追加</button>
-                    </div>
-                  </div>
-                )}
-
-                {infoEntries.length === 0 && <div className="empty-state">このタブにはまだ項目がありません。</div>}
-                {infoEntries.map(entry => {
-                  const shares = entry.info_shares || []
-                  const iKnow = shares.some(s => s.user_id === userId)
-                  return (
-                    <div key={entry.id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                        <span className="who">{entry.title}</span>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button
-                            className="plain"
-                            style={{ fontSize: 11, padding: '4px 10px', borderColor: iKnow ? 'var(--arcane)' : 'var(--ink-soft)', color: iKnow ? 'var(--arcane)' : 'var(--ink)' }}
-                            onClick={() => toggleShare(entry)}
-                          >
-                            {iKnow ? '✓ 知っている' : '共有する'}
-                          </button>
-                          {isHost && (
-                            <button className="plain" style={{ fontSize: 11, padding: '4px 10px', borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteInfoEntry(entry.id)}>削除</button>
-                          )}
-                        </div>
-                      </div>
-                      {entry.content && (
-                        <div className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{entry.content}</div>
-                      )}
-                      <div className="mono small-text">
-                        知っている探索者：{shares.length > 0 ? shares.map(s => s.character_name).join('、') : 'まだ誰も'}
-                      </div>
-                    </div>
-                  )
-                })}
-              </>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 14, whiteSpace: 'pre-wrap', color: session?.npc_notes ? 'var(--ink)' : 'var(--ink-soft)', fontStyle: session?.npc_notes ? 'normal' : 'italic' }}>
+              {session?.npc_notes || 'まだメモがありません'}
+            </div>
+            {isHost && (
+              <div className="actions">
+                <button className="plain" onClick={() => { setNpcDraft(session?.npc_notes || ''); setEditingNpc(true) }}>編集</button>
+              </div>
             )}
           </>
         )}
@@ -714,14 +477,6 @@ function ChatInner() {
           onChange={e => setText(e.target.value)}
           placeholder="ここに行動宣言を入力してください…"
         />
-        <div className="ffield" style={{ marginTop: 10, marginBottom: 0 }}>
-          <label>セリフ（任意）</label>
-          <input
-            value={dialogueLine}
-            onChange={e => setDialogueLine(e.target.value)}
-            placeholder="例：「気をつけて、何かいる……」"
-          />
-        </div>
 
         {skillGroups && (skillGroups.explore?.length || skillGroups.social?.length || skillGroups.action?.length) ? (
           <div className="actions" style={{ justifyContent: 'flex-start' }}>
@@ -749,7 +504,6 @@ function ChatInner() {
 
         <div className="actions" style={{ justifyContent: 'flex-start' }}>
           <button className="plain" onClick={rollPlainDice} disabled={!!myRollThisTurn}>🎲 1D100を振る（SAN値チェックなど）</button>
-          <button className="plain" onClick={rollPlainD6} disabled={!!myRollThisTurn}>🎲 1D6を振る</button>
           {myRollThisTurn && (
             <span className="mono small-text" style={{ alignSelf: 'center' }}>
               あなたの今ターンの判定：{myRollThisTurn.skill_name ? `${myRollThisTurn.skill_name}${myRollThisTurn.skill_value || ''} → ` : ''}
@@ -819,11 +573,6 @@ function ChatInner() {
                 >
                   {e.text}
                 </div>
-                {e.dialogue && (
-                  <div style={{ fontStyle: 'italic', color: 'var(--arcane)', fontSize: 13.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-                    「{e.dialogue}」
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -844,7 +593,7 @@ function ChatInner() {
           <div key={r.id} className="entry" style={{ opacity: r.voided ? 0.5 : 1, flexWrap: 'wrap', rowGap: 4 }}>
             <span className="who">{r.character_name}</span>
             <span className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-              {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : (r.dice_type === '1d6' ? '1D6' : '1D100')} → 出目 {r.roll}
+              {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : '1D100'} → 出目 {r.roll}
             </span>
             <span className="check">{resultLabel(r.result)}{r.voided ? '（取り消し）' : ''}</span>
           </div>
