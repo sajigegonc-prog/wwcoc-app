@@ -779,27 +779,35 @@ function ChatInner() {
           </div>
         ) : null}
 
-        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+        <div className="actions" style={{ justifyContent: 'flex-start' }}>
           <button className="plain" onClick={rollPlainDice} disabled={!!myRollThisTurn}>🎲 1D100を振る（SAN値チェックなど）</button>
-          {!showCustomDice && (
-            <button className="plain" style={{ fontSize: 11, opacity: 0.7 }} onClick={() => setShowCustomDice(true)}>他のダイス（1D6など） ▾</button>
-          )}
+        </div>
+
+        <div style={{ border: '1px solid var(--shadow)', borderRadius: 3, marginTop: 10, overflow: 'hidden' }}>
+          <div
+            className="row-between"
+            style={{ padding: '8px 12px', cursor: 'pointer', marginBottom: 0 }}
+            onClick={() => setShowCustomDice(v => !v)}
+          >
+            <span className="mono small-text">ダメージロールなど（1D6など）</span>
+            <span className="dim" style={{ fontSize: 11 }}>{showCustomDice ? '閉じる ▲' : '開く ▼'}</span>
+          </div>
           {showCustomDice && (
-            <>
+            <div className="actions" style={{ justifyContent: 'flex-start', padding: '0 12px 12px', marginTop: 0 }}>
               <select value={customDiceChoice} onChange={e => setCustomDiceChoice(e.target.value)} style={{ width: 90 }}>
                 {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
               </select>
-              <button className="plain" onClick={rollCustomDice} disabled={!!myRollThisTurn}>🎲 振る（ダメージロールなど）</button>
-              <button className="plain" style={{ fontSize: 11, opacity: 0.7 }} onClick={() => setShowCustomDice(false)}>しまう ▲</button>
-            </>
-          )}
-          {myRollThisTurn && (
-            <span className="mono small-text" style={{ alignSelf: 'center' }}>
-              あなたの今ターンの判定：{myRollThisTurn.skill_name ? `${myRollThisTurn.skill_name}${myRollThisTurn.skill_value || ''} → ` : ''}
-              {myRollThisTurn.roll_detail ? `[${myRollThisTurn.roll_detail.join(',')}]＝` : ''}{myRollThisTurn.roll}（{resultLabel(myRollThisTurn.result)}）
-            </span>
+              <button className="plain" onClick={rollCustomDice} disabled={!!myRollThisTurn}>🎲 このダイスを振る</button>
+            </div>
           )}
         </div>
+
+        {myRollThisTurn && (
+          <div className="mono small-text" style={{ marginTop: 10 }}>
+            あなたの今ターンの判定：{myRollThisTurn.skill_name ? `${myRollThisTurn.skill_name}${myRollThisTurn.skill_value || ''} → ` : ''}
+            {myRollThisTurn.roll_detail ? `[${myRollThisTurn.roll_detail.join(',')}]＝` : ''}{myRollThisTurn.roll}（{resultLabel(myRollThisTurn.result)}）
+          </div>
+        )}
 
         <div className="actions">
           <button className="plain" onClick={() => { setText(''); setDialogueLine(''); voidMyActiveRoll() }}>取り消し</button>
