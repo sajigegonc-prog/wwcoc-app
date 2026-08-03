@@ -207,105 +207,7 @@ function ChatInner() {
     setDialogueText('')
   }
 
-  // ---------- 情報共有ボード ----------
-  const [infoTabs, setInfoTabs] = useState([])
-  const [activeTabId, setActiveTabId] = useState(null)
-  const [infoEntries, setInfoEntries] = useState([])
-  const [newEntryContent, setNewEntryContent] = useState('')
-
-  const activeTab = infoTabs.find(t => t.id === activeTabId) || null
-
-  async function loadInfoTabs() {
-    const { data } = await supabase
-      .from('info_tabs')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('sort_order')
-      .order('created_at')
-    setInfoTabs(data || [])
-    if (data && data.length > 0 && !data.some(t => t.id === activeTabId)) {
-      setActiveTabId(data[0].id)
-    }
-  }
-
-  async function loadInfoEntries(tabId) {
-    if (!tabId) { setInfoEntries([]); return }
-    const { data } = await supabase
-      .from('info_entries')
-      .select('*, info_shares(user_id, character_name)')
-      .eq('tab_id', tabId)
-      .order('created_at')
-    setInfoEntries(data || [])
-  }
-
-  useEffect(() => {
-    loadInfoEntries(activeTabId)
-  }, [activeTabId])
-
-  async function addTab() {
-    const name = prompt('タブ名を入力してください（例：弱点、場所描写）')
-    if (!name || !name.trim()) return
-    const { error } = await supabase.from('info_tabs').insert({
-      session_id: sessionId,
-      name: name.trim(),
-      sort_order: infoTabs.length,
-    })
-    if (error) { alert('作成に失敗しました: ' + error.message); return }
-    loadInfoTabs()
-  }
-
-  async function renameTab(tab) {
-    const name = prompt('新しいタブ名', tab.name)
-    if (!name || !name.trim()) return
-    const { error } = await supabase.from('info_tabs').update({ name: name.trim() }).eq('id', tab.id)
-    if (error) { alert('変更に失敗しました: ' + error.message); return }
-    loadInfoTabs()
-  }
-
-  async function deleteTab(tab) {
-    if (!window.confirm(`「${tab.name}」タブを削除しますか？中の項目も全て消えます。`)) return
-    const { error } = await supabase.from('info_tabs').delete().eq('id', tab.id)
-    if (error) { alert('削除に失敗しました: ' + error.message); return }
-    setActiveTabId(null)
-    loadInfoTabs()
-  }
-
-  async function addEntry() {
-    if (!newEntryContent.trim()) { alert('内容を入力してください'); return }
-    const { error } = await supabase.from('info_entries').insert({
-      tab_id: activeTabId,
-      session_id: sessionId,
-      content: newEntryContent.trim(),
-    })
-    if (error) { alert('追加に失敗しました: ' + error.message); return }
-    setNewEntryContent('')
-    loadInfoEntries(activeTabId)
-  }
-
-  async function deleteInfoEntry(id) {
-    if (!window.confirm('この項目を削除しますか？')) return
-    const { error } = await supabase.from('info_entries').delete().eq('id', id)
-    if (error) { alert('削除に失敗しました: ' + error.message); return }
-    loadInfoEntries(activeTabId)
-  }
-
-  async function toggleShare(entry) {
-    const shares = entry.info_shares || []
-    const mine = shares.find(s => s.user_id === userId)
-    if (mine) {
-      const { error } = await supabase.from('info_shares').delete().eq('entry_id', entry.id).eq('user_id', userId)
-      if (error) { alert('更新に失敗しました: ' + error.message); return }
-    } else {
-      const { error } = await supabase.from('info_shares').insert({
-        entry_id: entry.id,
-        session_id: sessionId,
-        user_id: userId,
-        character_name: displayName(character),
-      })
-      if (error) { alert('更新に失敗しました: ' + error.message); return }
-    }
-    loadInfoEntries(activeTabId)
-  }
+  // ---------- 情報共有ボードは /info ページへ移動 ----------
 
   // Realtime push has proven unreliable in practice. Poll as the primary sync
   // mechanism so both sides reliably stay in sync (realtime, when it works,
@@ -313,7 +215,6 @@ function ChatInner() {
   useEffect(() => {
     if (!sessionId || !ready) return
     loadDialogue(session?.turn_number || 1)
-    loadInfoTabs()
     const interval = setInterval(() => {
       loadSession().then(s => {
         loadEntries()
@@ -321,11 +222,9 @@ function ChatInner() {
         loadParticipantsData()
         loadDialogue(s?.turn_number || 1)
       })
-      loadInfoTabs()
-      loadInfoEntries(activeTabId)
     }, 2500)
     return () => clearInterval(interval)
-  }, [sessionId, ready, activeTabId])
+  }, [sessionId, ready])
 
   async function confirmAction(standby) {
     const who = displayName(character)
@@ -515,9 +414,12 @@ function ChatInner() {
         ← トップへ戻る（セッション退出）
       </div>
       <div className="eyebrow">WWCoC / 行動宣言チャット</div>
-      <div className="row-between" style={{ marginBottom: 4 }}>
+      <div className="row-between" style={{ marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
         <h1 className="small" style={{ margin: 0 }}>行動宣言チャット</h1>
-        <Link href={`/history?session=${sessionId}`} className="plain">📖 全ターン履歴</Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link href={`/info?session=${sessionId}`} className="plain">🗂 情報共有ボード</Link>
+          <Link href={`/history?session=${sessionId}`} className="plain">📖 全ターン履歴</Link>
+        </div>
       </div>
 
       <div className="row-between">
@@ -560,29 +462,6 @@ function ChatInner() {
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="mono small-text" style={{ marginBottom: 10 }}>セリフチャット <span className="dim" style={{ fontSize: 11 }}>（このターンの行動に至るまでのロールプレイ。次のターンでリセット、AIコピーにも含まれます）</span></div>
-        <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {dialogue.length === 0 && <span className="dim">まだ発言がありません。</span>}
-          {dialogue.map(m => (
-            <div key={m.id} style={{ fontSize: 14 }}>
-              <span className="who" style={{ marginRight: 6 }}>{m.character_name}</span>
-              <span style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>「{m.text}」</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={dialogueText}
-            onChange={e => setDialogueText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
-            placeholder="セリフを入力…"
-            style={{ flex: 1 }}
-          />
-          <button className="plain primary" onClick={sendDialogue}>送信</button>
-        </div>
-      </div>
-
-      <div className="card" style={{ padding: '16px 20px' }}>
         <div className="mono small-text" style={{ marginBottom: 10 }}>ステータス</div>
         {participantsData.length === 0 && <span className="dim">読み込み中…</span>}
         {participantsData.map(p => (
@@ -608,104 +487,27 @@ function ChatInner() {
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="row-between" style={{ marginBottom: 10 }}>
-          <span className="mono small-text">情報共有ボード</span>
-          {isHost && (
-            <button className="plain" style={{ fontSize: 11, padding: '4px 10px' }} onClick={addTab}>＋ タブ追加</button>
-          )}
-        </div>
-
-        {infoTabs.length === 0 && <div className="dim">まだタブがありません。{isHost ? '「＋ タブ追加」から作成してください。' : ''}</div>}
-
-        {infoTabs.length > 0 && (
-          <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-              {infoTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  className="plain"
-                  style={{
-                    fontSize: 12, padding: '5px 12px',
-                    background: activeTabId === tab.id ? 'var(--wax)' : 'transparent',
-                    color: activeTabId === tab.id ? 'var(--parchment)' : 'var(--ink)',
-                    borderColor: activeTabId === tab.id ? 'var(--wax)' : 'var(--ink-soft)',
-                  }}
-                  onClick={() => setActiveTabId(tab.id)}
-                >
-                  {tab.name}
-                </button>
-              ))}
+        <div className="mono small-text" style={{ marginBottom: 10 }}>セリフチャット <span className="dim" style={{ fontSize: 11 }}>（このターンの行動に至るまでのロールプレイ。次のターンでリセット、AIコピーにも含まれます）</span></div>
+        <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {dialogue.length === 0 && <span className="dim">まだ発言がありません。</span>}
+          {dialogue.map(m => (
+            <div key={m.id} style={{ fontSize: 14 }}>
+              <span className="who" style={{ marginRight: 6 }}>{m.character_name}</span>
+              <span style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>「{m.text}」</span>
             </div>
-
-            {activeTab && (
-              <>
-                {isHost && (
-                  <div className="row-between" style={{ marginBottom: 10 }}>
-                    <button className="plain" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => renameTab(activeTab)}>タブ名を変更</button>
-                    <button className="plain" style={{ fontSize: 11, padding: '4px 10px', borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteTab(activeTab)}>タブを削除</button>
-                  </div>
-                )}
-
-                {isHost && (
-                  <div className="card" style={{ padding: 12, marginBottom: 14, background: 'var(--paper)' }}>
-                    <textarea
-                      value={newEntryContent}
-                      onChange={e => setNewEntryContent(e.target.value)}
-                      placeholder="内容（例：温室のトゲに触れると眠り毒。手袋があれば安全）"
-                      style={{ minHeight: 60, width: '100%', marginBottom: 8 }}
-                    />
-                    <div className="actions" style={{ marginTop: 0 }}>
-                      <button className="plain primary" onClick={addEntry}>この項目を追加</button>
-                    </div>
-                  </div>
-                )}
-
-                {infoEntries.length === 0 && <div className="empty-state">このタブにはまだ項目がありません。</div>}
-                {infoEntries.map(entry => {
-                  const shares = entry.info_shares || []
-                  const iKnow = shares.some(s => s.user_id === userId)
-                  return (
-                    <div key={entry.id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-                      <div
-                        className="what"
-                        style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
-                      >
-                        {entry.content}
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                        <span className="mono small-text">
-                          知っている探索者：{shares.length > 0 ? shares.map(s => s.character_name).join('、') : 'まだ誰も'}
-                        </span>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button
-                            className="plain"
-                            style={{ fontSize: 11, padding: '4px 10px', borderColor: iKnow ? 'var(--arcane)' : 'var(--ink-soft)', color: iKnow ? 'var(--arcane)' : 'var(--ink)' }}
-                            onClick={() => toggleShare(entry)}
-                          >
-                            {iKnow ? '✓ 知っている' : '共有する'}
-                          </button>
-                          {isHost && (
-                            <button className="plain" style={{ fontSize: 11, padding: '4px 10px', borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteInfoEntry(entry.id)}>削除</button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </>
-            )}
-          </>
-        )}
-      </div>
-
-      {isHost && (
-        <div className="actions" style={{ justifyContent: 'flex-start' }}>
-          <button className="plain" onClick={bulkCopySheets}>全員分をAI提出用にコピー</button>
-          <button className="plain" style={{ borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={endSession}>
-            探索を終了する
-          </button>
+          ))}
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={dialogueText}
+            onChange={e => setDialogueText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
+            placeholder="セリフを入力…"
+            style={{ flex: 1 }}
+          />
+          <button className="plain primary" onClick={sendDialogue}>送信</button>
+        </div>
+      </div>
 
       <div className="card">
         <div className="row-between" style={{ marginBottom: 0 }}>
@@ -857,6 +659,18 @@ function ChatInner() {
           </div>
         ))}
       </div>
+
+      {isHost && (
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <div className="mono small-text" style={{ marginBottom: 10 }}>セッション管理</div>
+          <div className="actions" style={{ justifyContent: 'flex-start' }}>
+            <button className="plain" onClick={bulkCopySheets}>全員分をAI提出用にコピー</button>
+            <button className="plain" style={{ borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={endSession}>
+              探索を終了する
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
