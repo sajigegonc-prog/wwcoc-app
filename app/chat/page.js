@@ -130,6 +130,7 @@ function ChatInner() {
   // Fetch everyone's avatar via a normal REST query (NOT the realtime channel) —
   // this keeps the presence/broadcast payload small while still letting us show icons.
   const [participantsData, setParticipantsData] = useState([])
+  const [showStatus, setShowStatus] = useState(false)
 
   async function loadParticipantsData() {
     const { data } = await supabase
@@ -610,28 +611,39 @@ function ChatInner() {
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
-        <div className="mono small-text" style={{ marginBottom: 10 }}>ステータス</div>
-        {participantsData.length === 0 && <span className="dim">読み込み中…</span>}
-        {participantsData.map(p => (
-          <div key={p.participantId} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid var(--shadow)', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: "'Cinzel', serif", fontSize: 13, minWidth: 70 }}>{p.name}</span>
-            {['hp', 'san', 'mp'].map(field => (
-              <span key={field} style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
-                {field.toUpperCase()}
-                {p.user_id === userId ? (
-                  <>
-                    <button className="plain" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => adjustStat(field, -1)}>−</button>
-                    <span style={{ minWidth: 20, textAlign: 'center' }}>{p[field] ?? '—'}</span>
-                    <button className="plain" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => adjustStat(field, 1)}>＋</button>
-                  </>
-                ) : (
-                  <span style={{ minWidth: 20, textAlign: 'center' }}>{p[field] ?? '—'}</span>
-                )}
-                / {p[field + 'Max'] ?? '—'}
-              </span>
+        <div
+          className="row-between"
+          style={{ marginBottom: showStatus ? 10 : 0, cursor: 'pointer' }}
+          onClick={() => setShowStatus(v => !v)}
+        >
+          <span className="mono small-text">ステータス</span>
+          <span className="plain" style={{ fontSize: 11, padding: '4px 10px' }}>{showStatus ? '閉じる ▲' : '開く ▼'}</span>
+        </div>
+        {showStatus && (
+          <>
+            {participantsData.length === 0 && <span className="dim">読み込み中…</span>}
+            {participantsData.map(p => (
+              <div key={p.participantId} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0', borderBottom: '1px solid var(--shadow)', flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: "'Cinzel', serif", fontSize: 13, minWidth: 70 }}>{p.name}</span>
+                {['hp', 'san', 'mp'].map(field => (
+                  <span key={field} style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
+                    {field.toUpperCase()}
+                    {p.user_id === userId ? (
+                      <>
+                        <button className="plain" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => adjustStat(field, -1)}>−</button>
+                        <span style={{ minWidth: 20, textAlign: 'center' }}>{p[field] ?? '—'}</span>
+                        <button className="plain" style={{ padding: '2px 7px', fontSize: 11 }} onClick={() => adjustStat(field, 1)}>＋</button>
+                      </>
+                    ) : (
+                      <span style={{ minWidth: 20, textAlign: 'center' }}>{p[field] ?? '—'}</span>
+                    )}
+                    / {p[field + 'Max'] ?? '—'}
+                  </span>
+                ))}
+              </div>
             ))}
-          </div>
-        ))}
+          </>
+        )}
       </div>
 
       <div className="card" style={{ padding: '16px 20px' }}>
