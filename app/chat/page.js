@@ -790,6 +790,7 @@ function ChatInner() {
                 {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
               </select>
               <button className="plain" onClick={rollCustomDice} disabled={!!myRollThisTurn}>🎲 振る（ダメージロールなど）</button>
+              <button className="plain" style={{ fontSize: 11, opacity: 0.7 }} onClick={() => setShowCustomDice(false)}>しまう ▲</button>
             </>
           )}
           {myRollThisTurn && (
