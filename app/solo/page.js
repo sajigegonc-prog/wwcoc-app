@@ -13,6 +13,7 @@ export default function Solo() {
   const [log, setLog] = useState([])
   const [copyPreview, setCopyPreview] = useState('')
   const [customDiceChoice, setCustomDiceChoice] = useState(DICE_OPTIONS[2]?.label || '1D6')
+  const [showCustomDice, setShowCustomDice] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -127,12 +128,27 @@ export default function Solo() {
           <p className="dim">この探索者には技能データがありません（テンプレート貼り付けで登録した場合のみ技能判定が使えます）。</p>
         )}
 
-        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+        <div className="actions" style={{ justifyContent: 'flex-start' }}>
           <button className="plain" onClick={rollPlain}>🎲 1D100を振る</button>
-          <select value={customDiceChoice} onChange={e => setCustomDiceChoice(e.target.value)} style={{ width: 90 }}>
-            {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
-          </select>
-          <button className="plain" onClick={rollCustomDice}>🎲 振る（ダメージロールなど）</button>
+        </div>
+
+        <div style={{ border: '1px solid var(--shadow)', borderRadius: 3, marginTop: 10, overflow: 'hidden' }}>
+          <div
+            className="row-between"
+            style={{ padding: '8px 12px', cursor: 'pointer', marginBottom: 0 }}
+            onClick={() => setShowCustomDice(v => !v)}
+          >
+            <span className="mono small-text">ダメージロールなど（1D6など）</span>
+            <span className="dim" style={{ fontSize: 11 }}>{showCustomDice ? '閉じる ▲' : '開く ▼'}</span>
+          </div>
+          {showCustomDice && (
+            <div className="actions" style={{ justifyContent: 'flex-start', padding: '0 12px 12px', marginTop: 0 }}>
+              <select value={customDiceChoice} onChange={e => setCustomDiceChoice(e.target.value)} style={{ width: 90 }}>
+                {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+              </select>
+              <button className="plain" onClick={rollCustomDice}>🎲 このダイスを振る</button>
+            </div>
+          )}
         </div>
       </div>
 
