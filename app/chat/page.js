@@ -207,7 +207,98 @@ function ChatInner() {
     setDialogueText('')
   }
 
-  // ---------- 情報共有ボードは /info ページへ移動 ----------
+  // ---------- 情報共有ボード（モーダル、ページ遷移しない＝在室状態を保つ） ----------
+  const [showInfoModal, setShowInfoModal] = useState(false)
+  const [infoTabs, setInfoTabs] = useState([])
+  const [activeTabId, setActiveTabId] = useState(null)
+  const [infoEntries, setInfoEntries] = useState([])
+  const [newEntryContent, setNewEntryContent] = useState('')
+
+  const activeTab = infoTabs.find(t => t.id === activeTabId) || null
+
+  async function loadInfoTabs() {
+    const { data } = await supabase
+      .from('info_tabs')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('sort_order')
+      .order('created_at')
+    setInfoTabs(data || [])
+    if (data && data.length > 0 && !data.some(t => t.id === activeTabId)) {
+      setActiveTabId(data[0].id)
+    }
+  }
+
+  async function loadInfoEntries(tabId) {
+    if (!tabId) { setInfoEntries([]); return }
+    const { data } = await supabase
+      .from('info_entries')
+      .select('*')
+      .eq('tab_id', tabId)
+      .order('created_at')
+    setInfoEntries(data || [])
+  }
+
+  useEffect(() => {
+    loadInfoEntries(activeTabId)
+  }, [activeTabId])
+
+  useEffect(() => {
+    if (!sessionId || !ready) return
+    loadInfoTabs()
+    const interval = setInterval(() => {
+      loadInfoTabs()
+      loadInfoEntries(activeTabId)
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [sessionId, ready, activeTabId])
+
+  async function addTab() {
+    const name = prompt('タブ名を入力してください（例：弱点、場所描写）')
+    if (!name || !name.trim()) return
+    const { error } = await supabase.from('info_tabs').insert({
+      session_id: sessionId,
+      name: name.trim(),
+      sort_order: infoTabs.length,
+    })
+    if (error) { alert('作成に失敗しました: ' + error.message); return }
+    loadInfoTabs()
+  }
+
+  async function renameTab(tab) {
+    const name = prompt('新しいタブ名', tab.name)
+    if (!name || !name.trim()) return
+    const { error } = await supabase.from('info_tabs').update({ name: name.trim() }).eq('id', tab.id)
+    if (error) { alert('変更に失敗しました: ' + error.message); return }
+    loadInfoTabs()
+  }
+
+  async function deleteTab(tab) {
+    if (!window.confirm(`「${tab.name}」タブを削除しますか？中の項目も全て消えます。`)) return
+    const { error } = await supabase.from('info_tabs').delete().eq('id', tab.id)
+    if (error) { alert('削除に失敗しました: ' + error.message); return }
+    setActiveTabId(null)
+    loadInfoTabs()
+  }
+
+  async function addEntry() {
+    if (!newEntryContent.trim()) { alert('内容を入力してください'); return }
+    const { error } = await supabase.from('info_entries').insert({
+      tab_id: activeTabId,
+      session_id: sessionId,
+      content: newEntryContent.trim(),
+    })
+    if (error) { alert('追加に失敗しました: ' + error.message); return }
+    setNewEntryContent('')
+    loadInfoEntries(activeTabId)
+  }
+
+  async function deleteInfoEntry(id) {
+    if (!window.confirm('この項目を削除しますか？')) return
+    const { error } = await supabase.from('info_entries').delete().eq('id', id)
+    if (error) { alert('削除に失敗しました: ' + error.message); return }
+    loadInfoEntries(activeTabId)
+  }
 
   // Realtime push has proven unreliable in practice. Poll as the primary sync
   // mechanism so both sides reliably stay in sync (realtime, when it works,
@@ -261,12 +352,7 @@ function ChatInner() {
     loadEntries()
   }
 
-  async function deleteEntry(entryId) {
-    if (!window.confirm('この行動を取り消しますか？（このターンの判定があれば、それも取り消されて振り直せるようになります）')) return
-    const { error } = await supabase.from('turn_actions').delete().eq('id', entryId)
-    if (error) { alert('削除に失敗しました: ' + error.message); return }
-    loadEntries()
-
+  async function voidMyActiveRoll() {
     const turn = session?.turn_number || 1
     const activeRoll = turnRolls.find(r => r.user_id === userId && r.turn_number === turn && !r.voided)
     if (activeRoll) {
@@ -275,6 +361,14 @@ function ChatInner() {
         setTurnRolls(prev => prev.map(r => r.id === activeRoll.id ? { ...r, voided: true } : r))
       }
     }
+  }
+
+  async function deleteEntry(entryId) {
+    if (!window.confirm('この行動を取り消しますか？（このターンの判定があれば、それも取り消されて振り直せるようになります）')) return
+    const { error } = await supabase.from('turn_actions').delete().eq('id', entryId)
+    if (error) { alert('削除に失敗しました: ' + error.message); return }
+    loadEntries()
+    voidMyActiveRoll()
   }
 
   const myRollThisTurn = turnRolls.find(r => r.user_id === userId && !r.voided)
@@ -417,7 +511,7 @@ function ChatInner() {
       <div className="row-between" style={{ marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
         <h1 className="small" style={{ margin: 0 }}>行動宣言チャット</h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <Link href={`/info?session=${sessionId}`} className="plain">🗂 情報共有ボード</Link>
+          <button className="plain" onClick={() => setShowInfoModal(true)}>🗂 情報共有ボード</button>
           <Link href={`/history?session=${sessionId}`} className="plain">📖 全ターン履歴</Link>
         </div>
       </div>
@@ -568,7 +662,7 @@ function ChatInner() {
         </div>
 
         <div className="actions">
-          <button className="plain" onClick={() => setText('')}>取り消し</button>
+          <button className="plain" onClick={() => { setText(''); setDialogueLine(''); voidMyActiveRoll() }}>取り消し</button>
           <button className="plain" onClick={() => confirmAction(true)}>待機する</button>
           <button className="plain primary" disabled={!text.trim()} onClick={() => confirmAction(false)}>行動確定 ✓</button>
         </div>
@@ -614,9 +708,11 @@ function ChatInner() {
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className="check">{e.is_standby ? '待機 ー' : '確定済み ✓'}</span>
-                    {e.user_id === userId && !e.is_standby && (
+                    {e.user_id === userId && (
                       <span style={{ display: 'flex', gap: 6 }}>
-                        <button className="plain" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => startEdit(e)}>修正</button>
+                        {!e.is_standby && (
+                          <button className="plain" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => startEdit(e)}>修正</button>
+                        )}
                         <button className="plain" style={{ padding: '4px 10px', fontSize: 11, borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteEntry(e.id)}>取消</button>
                       </span>
                     )}
@@ -668,6 +764,83 @@ function ChatInner() {
             <button className="plain" style={{ borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={endSession}>
               探索を終了する
             </button>
+          </div>
+        </div>
+      )}
+
+      {showInfoModal && (
+        <div className="overlay show" onClick={(e) => { if (e.target === e.currentTarget) setShowInfoModal(false) }}>
+          <div className="sheet">
+            <div className="sheet-head">
+              <h2>情報共有ボード</h2>
+              <button className="close-btn" onClick={() => setShowInfoModal(false)}>&times;</button>
+            </div>
+            <div className="sheet-body">
+              <div className="row-between" style={{ marginBottom: 10 }}>
+                <span className="mono small-text">タブ</span>
+                <button className="plain" style={{ fontSize: 11, padding: '4px 10px' }} onClick={addTab}>＋ タブ追加</button>
+              </div>
+
+              {infoTabs.length === 0 && <div className="dim">まだタブがありません。「＋ タブ追加」から作成してください。</div>}
+
+              {infoTabs.length > 0 && (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                    {infoTabs.map(tab => (
+                      <button
+                        key={tab.id}
+                        className="plain"
+                        style={{
+                          fontSize: 12, padding: '5px 12px',
+                          background: activeTabId === tab.id ? 'var(--wax)' : 'transparent',
+                          color: activeTabId === tab.id ? 'var(--parchment)' : 'var(--ink)',
+                          borderColor: activeTabId === tab.id ? 'var(--wax)' : 'var(--ink-soft)',
+                        }}
+                        onClick={() => setActiveTabId(tab.id)}
+                      >
+                        {tab.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  {activeTab && (
+                    <>
+                      <div className="row-between" style={{ marginBottom: 10 }}>
+                        <button className="plain" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => renameTab(activeTab)}>タブ名を変更</button>
+                        <button className="plain" style={{ fontSize: 11, padding: '4px 10px', borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteTab(activeTab)}>タブを削除</button>
+                      </div>
+
+                      <div className="card" style={{ padding: 12, marginBottom: 14, background: 'var(--paper)' }}>
+                        <textarea
+                          value={newEntryContent}
+                          onChange={e => setNewEntryContent(e.target.value)}
+                          placeholder="内容（例：温室のトゲに触れると眠り毒。手袋があれば安全）"
+                          style={{ minHeight: 60, width: '100%', marginBottom: 8 }}
+                        />
+                        <div className="actions" style={{ marginTop: 0 }}>
+                          <button className="plain primary" onClick={addEntry}>この項目を追加</button>
+                        </div>
+                      </div>
+
+                      {infoEntries.length === 0 && <div className="empty-state">このタブにはまだ項目がありません。</div>}
+                      {infoEntries.map(entry => (
+                        <div key={entry.id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+                          <div className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                            {entry.content}
+                          </div>
+                          <div className="actions" style={{ marginTop: 0 }}>
+                            <button className="plain" style={{ fontSize: 11, padding: '4px 10px', borderColor: 'var(--wax)', color: 'var(--wax)' }} onClick={() => deleteInfoEntry(entry.id)}>削除</button>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="sheet-actions">
+              <button className="plain primary" onClick={() => setShowInfoModal(false)}>閉じる</button>
+            </div>
           </div>
         </div>
       )}
