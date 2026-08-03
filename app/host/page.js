@@ -14,14 +14,12 @@ function randPass() {
 
 export default function Host() {
   const router = useRouter()
-  const [sessionName, setSessionName] = useState('')
   const [scenarioName, setScenarioName] = useState('')
   const [maxPlayers, setMaxPlayers] = useState('')
   const [created, setCreated] = useState(null)
   const [busy, setBusy] = useState(false)
 
   async function createSession() {
-    if (!sessionName.trim()) { alert('セッション名を入力してください'); return }
     setBusy(true)
     try {
       const user = await ensureAnonUser()
@@ -30,7 +28,6 @@ export default function Host() {
       const { data, error } = await supabase.from('sessions').insert({
         session_code: code,
         password: pass,
-        name: sessionName,
         scenario_name: scenarioName,
         max_players: parseInt(maxPlayers, 10) || null,
         host_id: user.id,
@@ -50,13 +47,13 @@ export default function Host() {
           mp_current: parseInt(stats.MP, 10) || null,
         }
       }
-      await supabase.from('session_participants').insert({
+      await supabase.from('session_participants').upsert({
         session_id: data.id,
         character_id: characterId,
         user_id: user.id,
         role: 'host',
         ...initStats,
-      })
+      }, { onConflict: 'session_id,user_id' })
       localStorage.setItem('wwcoc_session_id', data.id)
       localStorage.setItem('wwcoc_role', 'host')
       setCreated(data)
@@ -73,10 +70,6 @@ export default function Host() {
       <div className="eyebrow">WWCoC / ホスト</div>
       <h1 className="small">セッションを新規作成</h1>
       <div className="card">
-        <div className="ffield">
-          <label>セッション名</label>
-          <input value={sessionName} onChange={e => setSessionName(e.target.value)} placeholder="例：週末クトゥルフ卓" />
-        </div>
         <div className="ffield">
           <label>シナリオ名</label>
           <input value={scenarioName} onChange={e => setScenarioName(e.target.value)} placeholder="例：霧の温室にて" />
