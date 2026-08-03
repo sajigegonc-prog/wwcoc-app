@@ -1,7 +1,6 @@
 'use client'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { ensureAnonUser } from '../../lib/auth'
 import { DICE_OPTIONS } from '../../lib/dice'
@@ -209,6 +208,32 @@ function ChatInner() {
 
   // ---------- 情報共有ボード（モーダル、ページ遷移しない＝在室状態を保つ） ----------
   const [showInfoModal, setShowInfoModal] = useState(false)
+
+  // ---------- 全ターン履歴（モーダル） ----------
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [historyActions, setHistoryActions] = useState([])
+  const [historyRolls, setHistoryRolls] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  async function openHistoryModal() {
+    setShowHistoryModal(true)
+    setHistoryLoading(true)
+    const { data: a } = await supabase
+      .from('turn_actions')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('turn_number')
+      .order('created_at')
+    setHistoryActions(a || [])
+    const { data: r } = await supabase
+      .from('dice_rolls')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('turn_number')
+      .order('created_at')
+    setHistoryRolls(r || [])
+    setHistoryLoading(false)
+  }
   const [infoTabs, setInfoTabs] = useState([])
   const [activeTabId, setActiveTabId] = useState(null)
   const [infoEntries, setInfoEntries] = useState([])
@@ -512,7 +537,7 @@ function ChatInner() {
         <h1 className="small" style={{ margin: 0 }}>行動宣言チャット</h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="plain" onClick={() => setShowInfoModal(true)}>🗂 情報共有ボード</button>
-          <Link href={`/history?session=${sessionId}`} className="plain">📖 全ターン履歴</Link>
+          <button className="plain" onClick={openHistoryModal}>📖 全ターン履歴</button>
         </div>
       </div>
 
@@ -840,6 +865,71 @@ function ChatInner() {
             </div>
             <div className="sheet-actions">
               <button className="plain primary" onClick={() => setShowInfoModal(false)}>閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showHistoryModal && (
+        <div className="overlay show" onClick={(e) => { if (e.target === e.currentTarget) setShowHistoryModal(false) }}>
+          <div className="sheet">
+            <div className="sheet-head">
+              <h2>全ターン履歴</h2>
+              <button className="close-btn" onClick={() => setShowHistoryModal(false)}>&times;</button>
+            </div>
+            <div className="sheet-body">
+              {historyLoading && <div className="empty-state">読み込み中…</div>}
+              {!historyLoading && historyActions.length === 0 && historyRolls.length === 0 && (
+                <div className="empty-state">まだ記録がありません。</div>
+              )}
+              {!historyLoading && Array.from(new Set([
+                ...historyActions.map(a => a.turn_number),
+                ...historyRolls.map(r => r.turn_number),
+              ])).sort((a, b) => a - b).map(turn => {
+                const turnActions = historyActions.filter(a => a.turn_number === turn)
+                const turnRolls = historyRolls.filter(r => r.turn_number === turn)
+                return (
+                  <div key={turn} style={{ marginBottom: 22 }}>
+                    <div className="log-title">Turn {turn}</div>
+                    {turnActions.length === 0 && turnRolls.length === 0 && (
+                      <div className="dim" style={{ padding: '8px 0' }}>この回の記録はありません。</div>
+                    )}
+                    {turnActions.map(a => (
+                      <div key={a.id} className="entry" style={{ opacity: a.is_standby ? 0.65 : 1, flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                          <span className="who">{a.character_name}</span>
+                          <span className="check">{a.is_standby ? '待機' : '確定済み'}</span>
+                        </div>
+                        {a.dialogue && (
+                          <div style={{ fontStyle: 'italic', color: 'var(--arcane)', fontSize: 13.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                            「{a.dialogue}」
+                          </div>
+                        )}
+                        <div className="what" style={{ fontStyle: a.is_standby ? 'italic' : 'normal', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                          {a.text}
+                        </div>
+                      </div>
+                    ))}
+                    {turnRolls.length > 0 && (
+                      <>
+                        <div className="mono small-text" style={{ marginTop: 10, marginBottom: 4 }}>判定</div>
+                        {turnRolls.map(r => (
+                          <div key={r.id} className="entry" style={{ opacity: r.voided ? 0.5 : 1, flexWrap: 'wrap', rowGap: 4 }}>
+                            <span className="who">{r.character_name}</span>
+                            <span className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                              {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : (r.dice_type || '1D100')} → 出目 {r.roll_detail ? `[${r.roll_detail.join(',')}]＝` : ''}{r.roll}
+                            </span>
+                            <span className="check">{resultLabel(r.result)}{r.voided ? '（取り消し）' : ''}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="sheet-actions">
+              <button className="plain primary" onClick={() => setShowHistoryModal(false)}>閉じる</button>
             </div>
           </div>
         </div>
