@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { ensureAnonUser } from '../../lib/auth'
-import { rollD100, judgeResult } from '../../lib/dice'
+import { rollD100, judgeResult, DICE_OPTIONS, rollCustom } from '../../lib/dice'
 
 export default function Solo() {
   const router = useRouter()
@@ -12,6 +12,7 @@ export default function Solo() {
   const [skillChoice, setSkillChoice] = useState('')
   const [log, setLog] = useState([])
   const [copyPreview, setCopyPreview] = useState('')
+  const [customDiceChoice, setCustomDiceChoice] = useState(DICE_OPTIONS[2]?.label || '1D6')
 
   useEffect(() => {
     (async () => {
@@ -39,18 +40,26 @@ export default function Solo() {
     const [name, value] = skillChoice.split('|')
     const roll = rollD100()
     const result = judgeResult(roll, value)
-    setLog(prev => [{ id: Date.now(), skillName: name, skillValue: value, roll, result }, ...prev])
+    setLog(prev => [{ id: Date.now(), skillName: name, skillValue: value, roll, rollDetail: null, diceLabel: '1D100', result }, ...prev])
   }
 
   function rollPlain() {
     const roll = rollD100()
-    setLog(prev => [{ id: Date.now(), skillName: null, skillValue: null, roll, result: null }, ...prev])
+    setLog(prev => [{ id: Date.now(), skillName: null, skillValue: null, roll, rollDetail: null, diceLabel: '1D100', result: null }, ...prev])
+  }
+
+  function rollCustomDice() {
+    const opt = DICE_OPTIONS.find(o => o.label === customDiceChoice)
+    if (!opt) return
+    const { rolls, total } = rollCustom(opt.count, opt.sides)
+    setLog(prev => [{ id: Date.now(), skillName: null, skillValue: null, roll: total, rollDetail: opt.count > 1 ? rolls : null, diceLabel: opt.label, result: null }, ...prev])
   }
 
   function formatEntry(r) {
-    const label = r.skillName ? `${r.skillName}${r.skillValue}` : '1D100'
+    const label = r.skillName ? `${r.skillName}${r.skillValue}` : (r.diceLabel || '1D100')
+    const detail = r.rollDetail ? `[${r.rollDetail.join(',')}]＝` : ''
     const result = r.result || '出目のみ'
-    return `${character?.name || '探索者'}：${label} → 出目 ${r.roll}（${result}）`
+    return `${character?.name || '探索者'}：${label} → 出目 ${detail}${r.roll}（${result}）`
   }
 
   async function copyEntry(r) {
@@ -118,8 +127,12 @@ export default function Solo() {
           <p className="dim">この探索者には技能データがありません（テンプレート貼り付けで登録した場合のみ技能判定が使えます）。</p>
         )}
 
-        <div className="actions" style={{ justifyContent: 'flex-start' }}>
+        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
           <button className="plain" onClick={rollPlain}>🎲 1D100を振る</button>
+          <select value={customDiceChoice} onChange={e => setCustomDiceChoice(e.target.value)} style={{ width: 90 }}>
+            {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+          </select>
+          <button className="plain" onClick={rollCustomDice}>🎲 振る（ダメージロールなど）</button>
         </div>
       </div>
 
@@ -132,7 +145,7 @@ export default function Solo() {
         {log.map(r => (
           <div key={r.id} className="entry" style={{ flexWrap: 'wrap', rowGap: 4, alignItems: 'center' }}>
             <span className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-              {r.skillName ? `${r.skillName}${r.skillValue}` : '1D100'} → 出目 {r.roll}
+              {r.skillName ? `${r.skillName}${r.skillValue}` : (r.diceLabel || '1D100')} → 出目 {r.rollDetail ? `[${r.rollDetail.join(',')}]＝` : ''}{r.roll}
             </span>
             <span className="check">{r.result ? resultLabel(r.result) : '出目のみ'}</span>
             <button className="plain" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => copyEntry(r)}>コピー</button>

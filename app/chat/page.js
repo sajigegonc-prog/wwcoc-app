@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { ensureAnonUser } from '../../lib/auth'
+import { DICE_OPTIONS } from '../../lib/dice'
 
 function ChatInner() {
   const params = useSearchParams()
@@ -16,6 +17,7 @@ function ChatInner() {
   const [entries, setEntries] = useState([])
   const [text, setText] = useState('')
   const [dialogueLine, setDialogueLine] = useState('')
+  const [customDiceChoice, setCustomDiceChoice] = useState(DICE_OPTIONS[2]?.label || '1D6')
   const [skillChoice, setSkillChoice] = useState('')
   const [userId, setUserId] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -378,14 +380,15 @@ function ChatInner() {
 
   const myRollThisTurn = turnRolls.find(r => r.user_id === userId && !r.voided)
 
-  async function performRoll(skillName, skillValue, diceType = '1d100') {
+  async function performRoll(skillName, skillValue, diceLabel = '1D100', diceCount = 1, diceSides = 100) {
     if (myRollThisTurn) {
       alert(`このターンは既に判定済みです（${myRollThisTurn.skill_name ? myRollThisTurn.skill_name + '：' : ''}${myRollThisTurn.roll}${myRollThisTurn.result ? ' → ' + myRollThisTurn.result : '（出目のみ）'}）`)
       return
     }
-    const sides = diceType === '1d6' ? 6 : 100
-    const roll = Math.floor(Math.random() * sides) + 1
-    const hasValue = diceType === '1d100' && skillValue !== null && skillValue !== '' && !isNaN(parseInt(skillValue, 10))
+    const rolls = []
+    for (let i = 0; i < diceCount; i++) rolls.push(Math.floor(Math.random() * diceSides) + 1)
+    const roll = rolls.reduce((a, b) => a + b, 0)
+    const hasValue = diceLabel === '1D100' && skillValue !== null && skillValue !== '' && !isNaN(parseInt(skillValue, 10))
     const result = hasValue ? judgeResult(roll, skillValue) : null
     const { data, error } = await supabase.from('dice_rolls').insert({
       session_id: sessionId,
@@ -394,8 +397,9 @@ function ChatInner() {
       character_name: displayName(character),
       skill_name: skillName || null,
       skill_value: hasValue ? skillValue : null,
-      dice_type: diceType,
+      dice_type: diceLabel,
       roll,
+      roll_detail: diceCount > 1 ? rolls : null,
       result,
     }).select().single()
     if (error) {
@@ -408,10 +412,10 @@ function ChatInner() {
       return
     }
     setTurnRolls(prev => [...prev, data])
-    const diceLabel = diceType === '1d6' ? '1D6' : '1D100'
+    const detailPart = diceCount > 1 ? `[${rolls.join(',')}]＝` : ''
     const tag = skillName
       ? (hasValue ? `［${skillName}${skillValue}で判定：${roll} → ${result}］` : `［${skillName}：出目 ${roll}（判定基準未入力）］`)
-      : `［${diceLabel}：${roll}］`
+      : `［${diceLabel}：${detailPart}${roll}］`
     setText(t => (t ? t + ' ' + tag : tag))
   }
 
@@ -427,15 +431,17 @@ function ChatInner() {
   function rollSkillCheck() {
     if (!skillChoice) { alert('技能を選んでください'); return }
     const [name, value] = skillChoice.split('|')
-    performRoll(name, value)
+    performRoll(name, value, '1D100', 1, 100)
   }
 
   function rollPlainDice() {
-    performRoll(null, null, '1d100')
+    performRoll(null, null, '1D100', 1, 100)
   }
 
-  function rollPlainD6() {
-    performRoll(null, null, '1d6')
+  function rollCustomDice() {
+    const opt = DICE_OPTIONS.find(o => o.label === customDiceChoice)
+    if (!opt) { alert('ダイスを選んでください'); return }
+    performRoll(null, null, opt.label, opt.count, opt.sides)
   }
 
   async function nextTurn() {
@@ -745,13 +751,16 @@ function ChatInner() {
           </div>
         ) : null}
 
-        <div className="actions" style={{ justifyContent: 'flex-start' }}>
+        <div className="actions" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>
           <button className="plain" onClick={rollPlainDice} disabled={!!myRollThisTurn}>🎲 1D100を振る（SAN値チェックなど）</button>
-          <button className="plain" onClick={rollPlainD6} disabled={!!myRollThisTurn}>🎲 1D6を振る</button>
+          <select value={customDiceChoice} onChange={e => setCustomDiceChoice(e.target.value)} style={{ width: 90 }}>
+            {DICE_OPTIONS.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+          </select>
+          <button className="plain" onClick={rollCustomDice} disabled={!!myRollThisTurn}>🎲 振る（ダメージロールなど）</button>
           {myRollThisTurn && (
             <span className="mono small-text" style={{ alignSelf: 'center' }}>
               あなたの今ターンの判定：{myRollThisTurn.skill_name ? `${myRollThisTurn.skill_name}${myRollThisTurn.skill_value || ''} → ` : ''}
-              {myRollThisTurn.roll}（{resultLabel(myRollThisTurn.result)}）
+              {myRollThisTurn.roll_detail ? `[${myRollThisTurn.roll_detail.join(',')}]＝` : ''}{myRollThisTurn.roll}（{resultLabel(myRollThisTurn.result)}）
             </span>
           )}
         </div>
@@ -842,7 +851,7 @@ function ChatInner() {
           <div key={r.id} className="entry" style={{ opacity: r.voided ? 0.5 : 1, flexWrap: 'wrap', rowGap: 4 }}>
             <span className="who">{r.character_name}</span>
             <span className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-              {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : (r.dice_type === '1d6' ? '1D6' : '1D100')} → 出目 {r.roll}
+              {r.skill_name ? `${r.skill_name}${r.skill_value || ''}` : (r.dice_type || '1D100')} → 出目 {r.roll_detail ? `[${r.roll_detail.join(',')}]＝` : ''}{r.roll}
             </span>
             <span className="check">{resultLabel(r.result)}{r.voided ? '（取り消し）' : ''}</span>
           </div>
