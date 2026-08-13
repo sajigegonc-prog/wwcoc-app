@@ -182,6 +182,8 @@ function ChatInner() {
   const [dialogue, setDialogue] = useState([])
   const [showDialogueChat, setShowDialogueChat] = useState(false)
   const [dialogueText, setDialogueText] = useState('')
+  const [dialogueAction, setDialogueAction] = useState('')
+  const [selectedDialogueId, setSelectedDialogueId] = useState(null)
 
   async function loadDialogue(turnNumber) {
     const { data } = await supabase
@@ -189,12 +191,14 @@ function ChatInner() {
       .select('*')
       .eq('session_id', sessionId)
       .eq('turn_number', turnNumber ?? session?.turn_number ?? 1)
+      .order('display_order', { ascending: true, nullsFirst: false })
       .order('created_at')
     setDialogue(data || [])
   }
 
   async function sendDialogue() {
     const body = dialogueText.trim()
+    const action = dialogueAction.trim()
     if (!body) return
     const who = displayName(character)
     const { data, error } = await supabase.from('session_dialogue').insert({
@@ -203,10 +207,30 @@ function ChatInner() {
       user_id: userId,
       character_name: who,
       text: body,
+      action_note: action || null,
+      display_order: Date.now(),
     }).select().single()
     if (error) { alert('送信に失敗しました: ' + error.message); return }
     setDialogue(prev => [...prev, data])
     setDialogueText('')
+    setDialogueAction('')
+  }
+
+  async function moveDialogue(id, direction) {
+    const idx = dialogue.findIndex(m => m.id === id)
+    const targetIdx = idx + direction
+    if (idx === -1 || targetIdx < 0 || targetIdx >= dialogue.length) return
+    const a = dialogue[idx]
+    const b = dialogue[targetIdx]
+    const [errA, errB] = await Promise.all([
+      supabase.from('session_dialogue').update({ display_order: b.display_order }).eq('id', a.id),
+      supabase.from('session_dialogue').update({ display_order: a.display_order }).eq('id', b.id),
+    ]).then(results => results.map(r => r.error))
+    if (errA || errB) { alert('並べ替えに失敗しました'); return }
+    const next = [...dialogue]
+    next[idx] = { ...b, display_order: a.display_order }
+    next[targetIdx] = { ...a, display_order: b.display_order }
+    setDialogue(next)
   }
 
   const [editingDialogueId, setEditingDialogueId] = useState(null)
@@ -528,7 +552,7 @@ function ChatInner() {
       return `${e.full_name || e.character_name}：\n${dialoguePart}${e.text}`
     }).join('\n\n')
     const rpPart = dialogue.length > 0
-      ? `【このターンのロールプレイ】\n\n${dialogue.map(m => `${m.character_name}：「${m.text}」`).join('\n')}\n\n`
+      ? `【このターンのロールプレイ】\n\n${dialogue.map(m => `${m.character_name}：「${m.text}」${m.action_note ? `（${m.action_note}）` : ''}`).join('\n')}\n\n`
       : ''
     const full = `${rpPart}【探索者行動】（DEX順）\n\n今回のターン行動：\n\n${body}\n\n以上。\nこの行動を処理してください。`
     try {
@@ -663,9 +687,10 @@ function ChatInner() {
             <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>（このターンの行動に至るまでのロールプレイ。次のターンでリセット、AIコピーにも含まれます）</div>
             <div style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 2px' }}>
               {dialogue.length === 0 && <span className="dim">まだ発言がありません。</span>}
-              {dialogue.map(m => {
+              {dialogue.map((m, i) => {
                 const mine = m.user_id === userId
                 const av = participantsData.find(p => p.user_id === m.user_id)?.avatar
+                const isSelected = selectedDialogueId === m.id
                 return (
                   <div key={m.id} style={{ display: 'flex', flexDirection: mine ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 6 }}>
                     <div
@@ -697,6 +722,7 @@ function ChatInner() {
                         </div>
                       ) : (
                         <div
+                          onClick={() => { if (isHost) setSelectedDialogueId(isSelected ? null : m.id) }}
                           style={{
                             background: mine ? 'var(--wax)' : 'var(--paper)',
                             color: mine ? 'var(--parchment)' : 'var(--ink)',
@@ -705,9 +731,33 @@ function ChatInner() {
                             padding: '8px 12px',
                             fontSize: 14,
                             wordBreak: 'break-word', overflowWrap: 'anywhere',
+                            cursor: isHost ? 'pointer' : 'default',
+                            boxShadow: isHost && isSelected ? '0 0 0 2px var(--gold-soft)' : 'none',
                           }}
                         >
                           {m.text}
+                          {m.action_note && (
+                            <span style={{ display: 'block', fontSize: 12, fontStyle: 'italic', opacity: 0.8, marginTop: 3 }}>
+                              （{m.action_note}）
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {isHost && isSelected && editingDialogueId !== m.id && (
+                        <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+                          <span className="dim" style={{ fontSize: 9.5 }}>並べ替え</span>
+                          <button
+                            className="plain"
+                            style={{ padding: '2px 7px', fontSize: 11 }}
+                            disabled={i === 0}
+                            onClick={() => moveDialogue(m.id, -1)}
+                          >▲</button>
+                          <button
+                            className="plain"
+                            style={{ padding: '2px 7px', fontSize: 11 }}
+                            disabled={i === dialogue.length - 1}
+                            onClick={() => moveDialogue(m.id, 1)}
+                          >▼</button>
                         </div>
                       )}
                       {mine && editingDialogueId !== m.id && (
@@ -721,13 +771,21 @@ function ChatInner() {
                 )
               })}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="ffield" style={{ marginBottom: 6 }}>
               <input
                 value={dialogueText}
                 onChange={e => setDialogueText(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
                 placeholder="セリフを入力…"
-                style={{ flex: 1 }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={dialogueAction}
+                onChange={e => setDialogueAction(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
+                placeholder="補足アクション（任意・例：温室に駆けつけながら）"
+                style={{ flex: 1, fontSize: 13 }}
               />
               <button className="plain primary" onClick={sendDialogue}>送信</button>
             </div>
@@ -981,7 +1039,7 @@ function ChatInner() {
                       {infoEntries.length === 0 && <div className="empty-state">このタブにはまだ項目がありません。</div>}
                       {infoEntries.map(entry => (
                         <div key={entry.id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-                          <div className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                          <div className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
                             {entry.content}
                           </div>
                           <div className="actions" style={{ marginTop: 0 }}>
