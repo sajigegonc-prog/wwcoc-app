@@ -1,13 +1,15 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { ensureAnonUser } from '../../lib/auth'
 
-export default function Join() {
+function JoinInner() {
   const router = useRouter()
-  const [sessionCode, setSessionCode] = useState('WWCOC-')
+  const params = useSearchParams()
+  const prefillCode = params.get('code')
+  const [sessionCode, setSessionCode] = useState(prefillCode || 'WWCOC-')
   const [password, setPassword] = useState('MAGIC-')
   const [busy, setBusy] = useState(false)
 
@@ -36,13 +38,13 @@ export default function Join() {
           mp_current: parseInt(stats.MP, 10) || null,
         }
       }
-      await supabase.from('session_participants').insert({
+      await supabase.from('session_participants').upsert({
         session_id: sessionId,
         character_id: characterId,
         user_id: user.id,
         role: 'player',
         ...initStats,
-      })
+      }, { onConflict: 'session_id,user_id' })
       localStorage.setItem('wwcoc_session_id', sessionId)
       localStorage.setItem('wwcoc_role', 'player')
       router.push('/chat?session=' + sessionId)
@@ -74,5 +76,13 @@ export default function Join() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function Join() {
+  return (
+    <Suspense fallback={<div className="wrap">読み込み中…</div>}>
+      <JoinInner />
+    </Suspense>
   )
 }
