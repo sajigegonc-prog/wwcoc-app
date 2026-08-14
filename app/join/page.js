@@ -27,6 +27,16 @@ function JoinInner() {
       })
       if (error) throw error
 
+      const { data: hostOnline, error: hostCheckError } = await supabase.rpc('is_host_online', {
+        p_session_id: sessionId,
+      })
+      if (hostCheckError) throw hostCheckError
+      if (!hostOnline) {
+        alert('現在ホストが不在のため、参加できません。ホストがオンラインになってから、もう一度お試しください。')
+        setBusy(false)
+        return
+      }
+
       const characterId = localStorage.getItem('wwcoc_character_id')
       let initStats = {}
       if (characterId) {

@@ -9,6 +9,7 @@ export default function Resume() {
   const router = useRouter()
   const [mySessions, setMySessions] = useState([])
   const [loadingSessions, setLoadingSessions] = useState(true)
+  const [checkingId, setCheckingId] = useState(null)
 
   useEffect(() => {
     (async () => {
@@ -25,9 +26,30 @@ export default function Resume() {
     })()
   }, [])
 
-  function resumeSession(session) {
+  async function resumeSession(session) {
     // session_participants にこのユーザーの行がすでに存在する（＝一覧に出ている）時点で
-    // 参加資格は確認済みのため、ホスト・参加者どちらもパスワード再入力なしで直接チャットへ入れる。
+    // 参加資格そのものは確認済みのため、パスワードの再入力は不要。
+    // ただし参加者（プレイヤー）については、ホストが不在の部屋には入れないようにする。
+    // ホスト自身の再開はこのチェックの対象外。
+    if (session.myRole !== 'host') {
+      setCheckingId(session.id)
+      try {
+        const { data: hostOnline, error } = await supabase.rpc('is_host_online', {
+          p_session_id: session.id,
+        })
+        if (error) throw error
+        if (!hostOnline) {
+          alert('現在ホストが不在のため、入室できません。ホストがオンラインになってから、もう一度お試しください。')
+          return
+        }
+      } catch (err) {
+        alert('確認に失敗しました: ' + err.message)
+        return
+      } finally {
+        setCheckingId(null)
+      }
+    }
+
     localStorage.setItem('wwcoc_session_id', session.id)
     localStorage.setItem('wwcoc_role', session.myRole === 'host' ? 'host' : 'player')
     router.push('/chat?session=' + session.id)
@@ -63,7 +85,13 @@ export default function Resume() {
                 </span>
               </div>
               <div className="actions" style={{ marginTop: 0 }}>
-                <button className="plain primary" onClick={() => resumeSession(s)}>再開する →</button>
+                <button
+                  className="plain primary"
+                  disabled={checkingId === s.id}
+                  onClick={() => resumeSession(s)}
+                >
+                  {checkingId === s.id ? '確認中…' : '再開する →'}
+                </button>
               </div>
             </div>
           ))}

@@ -445,6 +445,7 @@ function ChatInner() {
   useEffect(() => {
     if (!sessionId || !ready) return
     loadDialogue(session?.turn_number || 1)
+    sendHeartbeat()
     const interval = setInterval(() => {
       loadSession().then(s => {
         loadEntries()
@@ -452,9 +453,22 @@ function ChatInner() {
         loadParticipantsData()
         loadDialogue(s?.turn_number || 1)
       })
+      sendHeartbeat()
     }, 2500)
     return () => clearInterval(interval)
   }, [sessionId, ready])
+
+  // ホストが不在（一定時間ハートビートが来ていない）かどうかの判定に使われる自分の最終確認時刻。
+  // 判定自体はサーバー側のis_host_online()で行うため、ここでは単純に自分のlast_seenを更新するだけでよい。
+  async function sendHeartbeat() {
+    if (!sessionId || !userId) return
+    const { error } = await supabase
+      .from('session_participants')
+      .update({ last_seen: new Date().toISOString() })
+      .eq('session_id', sessionId)
+      .eq('user_id', userId)
+    if (error) console.error('[heartbeat] failed', error)
+  }
 
   async function confirmAction(standby) {
     const who = displayName(character)
