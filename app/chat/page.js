@@ -26,6 +26,28 @@ function ChatInner() {
   const [participants, setParticipants] = useState([])
   const [ready, setReady] = useState(false)
   const channelRef = useRef(null)
+  const typingTimerRef = useRef(null)
+
+  function sendTyping(fieldKey, label) {
+    if (!channelRef.current) return
+    channelRef.current.track({
+      character_name: displayName(character),
+      role: role || 'player',
+      typing: { field: fieldKey, label },
+    })
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+    typingTimerRef.current = setTimeout(() => clearTyping(), 3000)
+  }
+
+  function clearTyping() {
+    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null }
+    if (!channelRef.current) return
+    channelRef.current.track({
+      character_name: displayName(character),
+      role: role || 'player',
+      typing: null,
+    })
+  }
 
   function displayName(c) {
     return c?.parsed?.firstName || c?.name || '無名の探索者'
@@ -116,12 +138,16 @@ function ChatInner() {
         () => { loadSession().then(s => { loadEntries(); loadRolls(s?.turn_number || 1) }) })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
-        setParticipants(Object.values(state).map(arr => arr[0]).filter(Boolean))
+        setParticipants(
+          Object.entries(state)
+            .map(([key, arr]) => (arr[0] ? { user_id: key, ...arr[0] } : null))
+            .filter(Boolean)
+        )
       })
       .subscribe(async (status, err) => {
         console.log('[realtime] channel status:', status, err || '')
         if (status === 'SUBSCRIBED') {
-          await channel.track({ character_name: displayName(character), role: role || 'player' })
+          await channel.track({ character_name: displayName(character), role: role || 'player', typing: null })
         }
       })
     channelRef.current = channel
@@ -175,7 +201,7 @@ function ChatInner() {
   // keep presence info up to date once character/role finish loading (or change)
   useEffect(() => {
     if (!channelRef.current) return
-    channelRef.current.track({ character_name: displayName(character), role: role || 'player' })
+    channelRef.current.track({ character_name: displayName(character), role: role || 'player', typing: null })
   }, [character, role])
 
   // ---------- セリフチャット（ターンでリセットされない） ----------
@@ -214,6 +240,7 @@ function ChatInner() {
     setDialogue(prev => [...prev, data])
     setDialogueText('')
     setDialogueAction('')
+    clearTyping()
   }
 
   async function moveDialogue(id, direction) {
@@ -426,6 +453,7 @@ function ChatInner() {
     setEntries(prev => prev.some(e => e.id === data.id) ? prev : [...prev, data])
     setText('')
     setDialogueLine('')
+    clearTyping()
   }
 
   function startEdit(entry) {
@@ -782,10 +810,19 @@ function ChatInner() {
                 )
               })}
             </div>
+
+            {participants
+              .filter(p => p.user_id !== userId && p.typing && (p.typing.field === 'dialogue_text' || p.typing.field === 'dialogue_action'))
+              .map(p => (
+                <div key={p.user_id} className="dim mono" style={{ fontSize: 11.5, marginBottom: 8 }}>
+                  {p.character_name}さんが{p.typing.label}入力中…
+                </div>
+              ))}
+
             <div className="ffield" style={{ marginBottom: 6 }}>
               <input
                 value={dialogueText}
-                onChange={e => setDialogueText(e.target.value)}
+                onChange={e => { setDialogueText(e.target.value); sendTyping('dialogue_text', 'セリフ') }}
                 onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
                 placeholder="セリフを入力…"
               />
@@ -793,7 +830,7 @@ function ChatInner() {
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 value={dialogueAction}
-                onChange={e => setDialogueAction(e.target.value)}
+                onChange={e => { setDialogueAction(e.target.value); sendTyping('dialogue_action', '補足アクション') }}
                 onKeyDown={e => { if (e.key === 'Enter') sendDialogue() }}
                 placeholder="補足アクション（任意・例：温室に駆けつけながら）"
                 style={{ flex: 1, fontSize: 13 }}
@@ -813,14 +850,14 @@ function ChatInner() {
           <label>セリフ（任意）</label>
           <input
             value={dialogueLine}
-            onChange={e => setDialogueLine(e.target.value)}
+            onChange={e => { setDialogueLine(e.target.value); sendTyping('declare_dialogue', 'セリフ') }}
             placeholder="例：「気をつけて、何かいる……」"
           />
         </div>
         <textarea
           className="transcript-input"
           value={text}
-          onChange={e => setText(e.target.value)}
+          onChange={e => { setText(e.target.value); sendTyping('declare_action', '行動宣言') }}
           placeholder="ここに行動宣言を入力してください…"
         />
 
@@ -950,6 +987,21 @@ function ChatInner() {
             )}
           </div>
         ))}
+
+        {participants
+          .filter(p => p.user_id !== userId && p.typing && (p.typing.field === 'declare_dialogue' || p.typing.field === 'declare_action'))
+          .map(p => (
+            <div key={p.user_id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, opacity: 0.75 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <span className="who">{p.character_name}</span>
+                <span className="check mono" style={{ color: 'var(--gold)' }}>入力中…</span>
+              </div>
+              <div className="dim" style={{ fontStyle: 'italic', fontSize: 13.5 }}>
+                {p.typing.label}を入力中…
+              </div>
+            </div>
+          ))}
+
         <div className="actions between">
           <span className="mono small-text">{entries.length} 件</span>
           <div style={{ display: 'flex', gap: 10 }}>
