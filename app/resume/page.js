@@ -5,6 +5,33 @@ import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { ensureAnonUser } from '../../lib/auth'
 
+// 対象セッションのRealtime Presenceチャンネルに一時的に相乗りし、
+// 「host」ロールで在室している人がいるかどうかを確認する。
+// 自分自身はtrack()しない（在室者としてカウントされないようにするため）。
+function checkHostPresence(sessionId, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    let settled = false
+    const channel = supabase.channel('session_' + sessionId, {
+      config: { presence: { key: 'entry-check-' + Math.random().toString(36).slice(2) } },
+    })
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      supabase.removeChannel(channel)
+      resolve(result)
+    }
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        const hasHost = Object.values(state).some(arr => arr[0]?.role === 'host')
+        finish(hasHost)
+      })
+      .subscribe()
+  })
+}
+
 export default function Resume() {
   const router = useRouter()
   const [mySessions, setMySessions] = useState([])
@@ -33,20 +60,11 @@ export default function Resume() {
     // ホスト自身の再開はこのチェックの対象外。
     if (session.myRole !== 'host') {
       setCheckingId(session.id)
-      try {
-        const { data: hostOnline, error } = await supabase.rpc('is_host_online', {
-          p_session_id: session.id,
-        })
-        if (error) throw error
-        if (!hostOnline) {
-          alert('現在ホストが不在のため、入室できません。ホストがオンラインになってから、もう一度お試しください。')
-          return
-        }
-      } catch (err) {
-        alert('確認に失敗しました: ' + err.message)
+      const hostOnline = await checkHostPresence(session.id)
+      setCheckingId(null)
+      if (!hostOnline) {
+        alert('現在ホストが不在のため、入室できません。ホストがオンラインになってから、もう一度お試しください。')
         return
-      } finally {
-        setCheckingId(null)
       }
     }
 

@@ -5,6 +5,33 @@ import Link from 'next/link'
 import { supabase } from '../../lib/supabaseClient'
 import { ensureAnonUser } from '../../lib/auth'
 
+// 対象セッションのRealtime Presenceチャンネルに一時的に相乗りし、
+// 「host」ロールで在室している人がいるかどうかを確認する。
+// 自分自身はtrack()しない（在室者としてカウントされないようにするため）。
+function checkHostPresence(sessionId, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    let settled = false
+    const channel = supabase.channel('session_' + sessionId, {
+      config: { presence: { key: 'entry-check-' + Math.random().toString(36).slice(2) } },
+    })
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      supabase.removeChannel(channel)
+      resolve(result)
+    }
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        const hasHost = Object.values(state).some(arr => arr[0]?.role === 'host')
+        finish(hasHost)
+      })
+      .subscribe()
+  })
+}
+
 function JoinInner() {
   const router = useRouter()
   const params = useSearchParams()
@@ -27,10 +54,7 @@ function JoinInner() {
       })
       if (error) throw error
 
-      const { data: hostOnline, error: hostCheckError } = await supabase.rpc('is_host_online', {
-        p_session_id: sessionId,
-      })
-      if (hostCheckError) throw hostCheckError
+      const hostOnline = await checkHostPresence(sessionId)
       if (!hostOnline) {
         alert('現在ホストが不在のため、参加できません。ホストがオンラインになってから、もう一度お試しください。')
         setBusy(false)
