@@ -26,13 +26,11 @@ export default function Resume() {
   }, [])
 
   function resumeSession(session) {
-    if (session.myRole === 'host') {
-      localStorage.setItem('wwcoc_session_id', session.id)
-      localStorage.setItem('wwcoc_role', 'host')
-      router.push('/chat?session=' + session.id)
-    } else {
-      router.push('/join?code=' + encodeURIComponent(session.session_code))
-    }
+    // session_participants にこのユーザーの行がすでに存在する（＝一覧に出ている）時点で
+    // 参加資格は確認済みのため、ホスト・参加者どちらもパスワード再入力なしで直接チャットへ入れる。
+    localStorage.setItem('wwcoc_session_id', session.id)
+    localStorage.setItem('wwcoc_role', session.myRole === 'host' ? 'host' : 'player')
+    router.push('/chat?session=' + session.id)
   }
 
   return (
