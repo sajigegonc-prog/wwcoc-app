@@ -27,27 +27,8 @@ function ChatInner() {
   const [ready, setReady] = useState(false)
   const channelRef = useRef(null)
   const typingTimerRef = useRef(null)
-
-  function sendTyping(fieldKey, label) {
-    if (!channelRef.current) return
-    channelRef.current.track({
-      character_name: displayName(character),
-      role: role || 'player',
-      typing: { field: fieldKey, label },
-    })
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
-    typingTimerRef.current = setTimeout(() => clearTyping(), 3000)
-  }
-
-  function clearTyping() {
-    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null }
-    if (!channelRef.current) return
-    channelRef.current.track({
-      character_name: displayName(character),
-      role: role || 'player',
-      typing: null,
-    })
-  }
+  const typingFieldRef = useRef(null)
+  const lastTypingSentRef = useRef(0)
 
   function displayName(c) {
     return c?.parsed?.firstName || c?.name || '無名の探索者'
@@ -147,7 +128,7 @@ function ChatInner() {
       .subscribe(async (status, err) => {
         console.log('[realtime] channel status:', status, err || '')
         if (status === 'SUBSCRIBED') {
-          await channel.track({ character_name: displayName(character), role: role || 'player', typing: null })
+          await channel.track({ character_name: displayName(character), role: role || 'player' })
         }
       })
     channelRef.current = channel
@@ -162,7 +143,7 @@ function ChatInner() {
   async function loadParticipantsData() {
     const { data } = await supabase
       .from('session_participants')
-      .select('id, user_id, role, hp_current, san_current, mp_current, characters(name, avatar, parsed)')
+      .select('id, user_id, role, hp_current, san_current, mp_current, typing_field, typing_label, typing_until, characters(name, avatar, parsed)')
       .eq('session_id', sessionId)
     const rows = (data || []).map(row => ({
       participantId: row.id,
@@ -177,6 +158,9 @@ function ChatInner() {
       dex: parseInt(row.characters?.parsed?.stats?.DEX, 10) || 0,
       name: row.characters?.parsed?.firstName || row.characters?.name || '無名の探索者',
       avatar: row.characters?.avatar || null,
+      typingField: row.typing_field || null,
+      typingLabel: row.typing_label || null,
+      typingUntil: row.typing_until || null,
     }))
     setParticipantsData(rows)
   }
@@ -185,6 +169,43 @@ function ChatInner() {
     if (!sessionId || !ready) return
     loadParticipantsData()
   }, [sessionId, ready, participants.length])
+
+  // ---------- 入力中インジケーター ----------
+  // Realtime(Presence)は実運用で不安定なため使わず、他の同期処理と同じく
+  // DB更新＋ポーリング（下のuseEffectで2.5秒ごとにloadParticipantsDataが走る）に相乗りさせる。
+  // 連打防止のため、同じ欄を打ち続けている間はDB更新を1.5秒に1回程度に間引く。
+  async function sendTyping(fieldKey, label) {
+    const mine = participantsData.find(p => p.user_id === userId)
+    if (!mine) return
+    const now = Date.now()
+    const fieldChanged = typingFieldRef.current !== fieldKey
+    if (fieldChanged || now - lastTypingSentRef.current > 1500) {
+      typingFieldRef.current = fieldKey
+      lastTypingSentRef.current = now
+      const { error } = await supabase.from('session_participants').update({
+        typing_field: fieldKey,
+        typing_label: label,
+        typing_until: new Date(now + 4000).toISOString(),
+      }).eq('id', mine.participantId)
+      if (error) console.error('[typing] update failed', error)
+    }
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
+    typingTimerRef.current = setTimeout(() => clearTyping(), 3000)
+  }
+
+  async function clearTyping() {
+    if (typingTimerRef.current) { clearTimeout(typingTimerRef.current); typingTimerRef.current = null }
+    typingFieldRef.current = null
+    lastTypingSentRef.current = 0
+    const mine = participantsData.find(p => p.user_id === userId)
+    if (!mine) return
+    const { error } = await supabase.from('session_participants').update({
+      typing_field: null,
+      typing_label: null,
+      typing_until: null,
+    }).eq('id', mine.participantId)
+    if (error) console.error('[typing] clear failed', error)
+  }
 
   async function adjustStat(field, delta) {
     const mine = participantsData.find(p => p.user_id === userId)
@@ -201,7 +222,7 @@ function ChatInner() {
   // keep presence info up to date once character/role finish loading (or change)
   useEffect(() => {
     if (!channelRef.current) return
-    channelRef.current.track({ character_name: displayName(character), role: role || 'player', typing: null })
+    channelRef.current.track({ character_name: displayName(character), role: role || 'player' })
   }, [character, role])
 
   // ---------- セリフチャット（ターンでリセットされない） ----------
@@ -811,11 +832,13 @@ function ChatInner() {
               })}
             </div>
 
-            {participants
-              .filter(p => p.user_id !== userId && p.typing && (p.typing.field === 'dialogue_text' || p.typing.field === 'dialogue_action'))
+            {participantsData
+              .filter(p => p.user_id !== userId
+                && (p.typingField === 'dialogue_text' || p.typingField === 'dialogue_action')
+                && p.typingUntil && new Date(p.typingUntil) > new Date())
               .map(p => (
                 <div key={p.user_id} className="dim mono" style={{ fontSize: 11.5, marginBottom: 8 }}>
-                  {p.character_name}さんが{p.typing.label}入力中…
+                  {p.name}さんが{p.typingLabel}入力中…
                 </div>
               ))}
 
@@ -988,16 +1011,18 @@ function ChatInner() {
           </div>
         ))}
 
-        {participants
-          .filter(p => p.user_id !== userId && p.typing && (p.typing.field === 'declare_dialogue' || p.typing.field === 'declare_action'))
+        {participantsData
+          .filter(p => p.user_id !== userId
+            && (p.typingField === 'declare_dialogue' || p.typingField === 'declare_action')
+            && p.typingUntil && new Date(p.typingUntil) > new Date())
           .map(p => (
             <div key={p.user_id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, opacity: 0.75 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <span className="who">{p.character_name}</span>
+                <span className="who">{p.name}</span>
                 <span className="check mono" style={{ color: 'var(--gold)' }}>入力中…</span>
               </div>
               <div className="dim" style={{ fontStyle: 'italic', fontSize: 13.5 }}>
-                {p.typing.label}を入力中…
+                {p.typingLabel}を入力中…
               </div>
             </div>
           ))}
