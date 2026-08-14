@@ -263,12 +263,15 @@ function ChatInner() {
 
   // ---------- 全ターン履歴（モーダル） ----------
   const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [historyTab, setHistoryTab] = useState('actions') // 'actions' | 'dialogue'
   const [historyActions, setHistoryActions] = useState([])
   const [historyRolls, setHistoryRolls] = useState([])
+  const [historyDialogue, setHistoryDialogue] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
   async function openHistoryModal() {
     setShowHistoryModal(true)
+    setHistoryTab('actions')
     setHistoryLoading(true)
     const { data: a } = await supabase
       .from('turn_actions')
@@ -284,6 +287,14 @@ function ChatInner() {
       .order('turn_number')
       .order('created_at')
     setHistoryRolls(r || [])
+    const { data: d } = await supabase
+      .from('session_dialogue')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('turn_number')
+      .order('display_order', { ascending: true, nullsFirst: false })
+      .order('created_at')
+    setHistoryDialogue(d || [])
     setHistoryLoading(false)
   }
   const [infoTabs, setInfoTabs] = useState([])
@@ -1067,11 +1078,41 @@ function ChatInner() {
               <button className="close-btn" onClick={() => setShowHistoryModal(false)}>&times;</button>
             </div>
             <div className="sheet-body">
+              {!historyLoading && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+                  <button
+                    className="plain"
+                    style={{
+                      fontSize: 12, padding: '5px 14px',
+                      background: historyTab === 'actions' ? 'var(--wax)' : 'transparent',
+                      color: historyTab === 'actions' ? 'var(--parchment)' : 'var(--ink)',
+                      borderColor: historyTab === 'actions' ? 'var(--wax)' : 'var(--ink-soft)',
+                    }}
+                    onClick={() => setHistoryTab('actions')}
+                  >
+                    行動
+                  </button>
+                  <button
+                    className="plain"
+                    style={{
+                      fontSize: 12, padding: '5px 14px',
+                      background: historyTab === 'dialogue' ? 'var(--wax)' : 'transparent',
+                      color: historyTab === 'dialogue' ? 'var(--parchment)' : 'var(--ink)',
+                      borderColor: historyTab === 'dialogue' ? 'var(--wax)' : 'var(--ink-soft)',
+                    }}
+                    onClick={() => setHistoryTab('dialogue')}
+                  >
+                    セリフ
+                  </button>
+                </div>
+              )}
+
               {historyLoading && <div className="empty-state">読み込み中…</div>}
-              {!historyLoading && historyActions.length === 0 && historyRolls.length === 0 && (
+
+              {!historyLoading && historyTab === 'actions' && historyActions.length === 0 && historyRolls.length === 0 && (
                 <div className="empty-state">まだ記録がありません。</div>
               )}
-              {!historyLoading && Array.from(new Set([
+              {!historyLoading && historyTab === 'actions' && Array.from(new Set([
                 ...historyActions.map(a => a.turn_number),
                 ...historyRolls.map(r => r.turn_number),
               ])).sort((a, b) => a - b).map(turn => {
@@ -1113,6 +1154,36 @@ function ChatInner() {
                         ))}
                       </>
                     )}
+                  </div>
+                )
+              })}
+
+              {!historyLoading && historyTab === 'dialogue' && historyDialogue.length === 0 && (
+                <div className="empty-state">まだ記録がありません。</div>
+              )}
+              {!historyLoading && historyTab === 'dialogue' && Array.from(new Set(
+                historyDialogue.map(d => d.turn_number)
+              )).sort((a, b) => a - b).map(turn => {
+                const turnDialogue = historyDialogue.filter(d => d.turn_number === turn)
+                return (
+                  <div key={turn} style={{ marginBottom: 22 }}>
+                    <div className="log-title">Turn {turn}</div>
+                    {turnDialogue.length === 0 && (
+                      <div className="dim" style={{ padding: '8px 0' }}>この回のセリフはありません。</div>
+                    )}
+                    {turnDialogue.map(d => (
+                      <div key={d.id} className="entry" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                        <span className="who">{d.character_name}</span>
+                        <div className="what" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                          「{d.text}」
+                        </div>
+                        {d.action_note && (
+                          <div style={{ fontStyle: 'italic', color: 'var(--ink-soft)', fontSize: 12.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                            （{d.action_note}）
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )
               })}
